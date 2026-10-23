@@ -1,0 +1,155 @@
+---
+// The headline, acted out: the first line types itself, quick and effortless; the second arrives
+// scrambled and is worked out a letter at a time. It waits for the loader to burst (`flock:released`
+// on the window). Screen readers get the sentence at once, and with reduced motion it simply stands
+// there.
+interface Props {
+	lines: [string, string];
+}
+const { lines } = Astro.props;
+---
+
+<h1 class="headline" aria-label={lines.join(' ')}>
+	{
+		lines.map((line) => (
+			<span class="line" aria-hidden="true">
+				{[...line].map((ch) => (
+					<span class="ch">{ch}</span>
+				))}
+			</span>
+		))
+	}
+</h1>
+<script is:inline>
+	// Before the first paint, so the finished headline never flashes up before it is played.
+	if (!matchMedia('(prefers-reduced-motion: reduce)').matches) document.currentScript.previousElementSibling.classList.add('playing');
+</script>
+
+<script>
+	const AFTER_BURST = 1200; // ms after the loader bursts before the first letter
+	const TYPE_EVERY = 38; // ms a letter, line one
+	const PAUSE = 450; // ms between the lines
+	const APPEAR_EVERY = 25; // ms a letter, line two's scramble running ahead
+	const SETTLE_AFTER = 300; // ms of scramble before line two's first letter settles
+	const SETTLE_EVERY = 45; // ms a letter, line two's settled text following
+	const SHUFFLE_EVERY = 55; // ms between new random glyphs
+	const GLYPHS = 'abcdefghijklmnopqrstuvwxyz#%&*+=/<>?';
+
+	const headline = document.querySelector('.headline')!;
+	const [typed, worked] = [...headline.querySelectorAll('.line')].map((line) => [
+		...line.querySelectorAll<HTMLElement>('.ch')
+	]);
+	const random = () => GLYPHS[Math.floor(Math.random() * GLYPHS.length)];
+
+	if (headline.classList.contains('playing')) {
+		// Line two shows up as noise, fast, and is worked out behind it, slower: each letter settles
+		// at its own moment, a little early or late.
+		const settleAt = worked.map((_, i) => SETTLE_AFTER + i * SETTLE_EVERY + (Math.random() - 0.5) * SETTLE_EVERY);
+		const appearAt = settleAt.map((at, i) => Math.min(i * APPEAR_EVERY, at));
+		const secondStart = typed.length * TYPE_EVERY + PAUSE;
+		// The noise is drawn on a copy of line two laid over it, and that copy is see-through as a
+		// whole, so where two glyphs overlap they don't add up.
+		const workedLine = headline.querySelectorAll<HTMLElement>('.line')[1];
+		const noiseLine = workedLine.cloneNode(true) as HTMLElement;
+		noiseLine.classList.add('noise');
+		workedLine.append(noiseLine);
+		const noise = [...noiseLine.querySelectorAll<HTMLElement>('.ch')];
+		noise.forEach((ch) => ch.classList.add('on'));
+		let start: number | null = null;
+		let lastShuffle = -Infinity;
+
+		const frame = (now: number) => {
+			start ??= now;
+			const t = now - start;
+			const shown = Math.min(typed.length, Math.floor(t / TYPE_EVERY));
+			typed.forEach((ch, i) => {
+				ch.classList.toggle('on', i < shown);
+				ch.classList.toggle('caret', i === shown - 1 && shown < typed.length);
+			});
+
+			const t2 = t - secondStart;
+			const shuffle = now - lastShuffle > SHUFFLE_EVERY;
+			if (shuffle) lastShuffle = now;
+			let done = t2 >= 0;
+			worked.forEach((ch, i) => {
+				const blank = ch.textContent === ' ';
+				if (t2 < appearAt[i]) return void (done = false);
+				ch.classList.add('on');
+				const settled = blank || t2 >= settleAt[i];
+				ch.classList.toggle('scrambling', !settled);
+				if (settled) {
+					delete noise[i].dataset.glyph;
+				} else {
+					done = false;
+					if (shuffle || !noise[i].dataset.glyph) noise[i].dataset.glyph = random();
+				}
+			});
+
+			if (!done) return requestAnimationFrame(frame);
+			noiseLine.remove();
+			headline.classList.remove('playing');
+		};
+		// After the loader, or after a while if there is none to wait for.
+		let begun = false;
+		const begin = () => {
+			if (begun) return;
+			begun = true;
+			requestAnimationFrame(frame);
+		};
+		addEventListener('flock:released', () => setTimeout(begin, AFTER_BURST), { once: true });
+		setTimeout(begin, 8000);
+	}
+</script>
+
+<style>
+	.headline {
+		margin: 0;
+		/* No font of our own: everyone reads it in their system's (SF Pro on Apple, Segoe UI on
+		   Windows, Roboto on Android). Nothing to download, native everywhere. */
+		font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+		font-size: clamp(2.5rem, 7vw, 7rem);
+		font-weight: 800;
+		line-height: 0.95;
+		letter-spacing: -0.04em;
+	}
+	.line {
+		display: block;
+		position: relative;
+	}
+	.ch {
+		position: relative;
+	}
+	.playing .ch:not(.on) {
+		opacity: 0;
+	}
+	/* A letter still being worked out keeps its real width, empty; the noise layer over the line
+	   shows a random one in its place. The layer is see-through as one, not glyph by glyph. */
+	.ch.scrambling {
+		color: transparent;
+	}
+	.noise {
+		position: absolute;
+		inset: 0;
+		pointer-events: none;
+	}
+	.noise .ch {
+		color: transparent;
+	}
+	.noise .ch[data-glyph]::after {
+		content: attr(data-glyph);
+		position: absolute;
+		inset: 0;
+		text-align: center;
+		color: var(--subtle, #8a93a8);
+		font-weight: 400;
+	}
+	.ch.caret::after {
+		content: '';
+		position: absolute;
+		top: 0.08em;
+		bottom: 0.04em;
+		right: -0.12em;
+		width: 0.06em;
+		background: currentColor;
+	}
+</style>

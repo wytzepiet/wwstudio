@@ -14,6 +14,17 @@ export interface Frame {
 	time: number;
 	frame: number;
 	goal: Vec3;
+	/** 0 flocking, 1 held in the ring. */
+	hold: number;
+	/** An outward kick this frame, world units per second; 0 most frames. */
+	burst: number;
+	/** How full the loader ring is, 0 to 1, and how far it has turned since it filled. */
+	progress: number;
+	ringAngle: number;
+	/** × ringRadius: below 1 while the ring tenses before it bursts. */
+	ringScale: number;
+	/** How fast the push dies away, per second: faster just after a burst. */
+	pushDecay: number;
 	viewProj: Float32Array;
 	camRight: Vec3;
 	camUp: Vec3;
@@ -27,7 +38,7 @@ export interface Frame {
 
 const GROUP = 128;
 const BOID = 48; // bytes: pos, vel, push
-const SIM = 256; // bytes, the Sim struct
+const SIM = 288; // bytes, the Sim struct
 const groups = (n: number) => Math.ceil(n / GROUP);
 
 /**
@@ -116,7 +127,7 @@ export class Flock {
 		for (let i = 0; i < this.count; i++) {
 			const p = inBall();
 			const v = inBall();
-			data.set([p[0] * 300, p[1] * 300, p[2] * 300, 0, v[0] * 60, v[1] * 60, v[2] * 60, 0], (i * BOID) / 4);
+			data.set([p[0] * 300, p[1] * 300, p[2] * 300, 0, v[0] * 60, v[1] * 60, v[2] * 60, i], (i * BOID) / 4);
 		}
 		return data;
 	}
@@ -138,8 +149,12 @@ export class Flock {
 		U.set([p.maxPerCell, f.frame], 49);
 		F[51] = p.seek;
 		F.set([p.maxSpeed, p.maxAccel, p.sep, p.ali], 52);
-		F.set([p.coh, p.bounds, p.mouse], 56);
-		F.set([p.wander, p.wanderScale, p.wanderSpeed], 60);
+		F.set([p.coh, p.bounds, p.mouse, f.hold], 56);
+		F.set([p.wander, p.wanderScale, p.wanderSpeed, f.burst], 60);
+		F.set([Math.max(p.ringRadius * f.ringScale, 1), p.ringSpin, f.progress, f.ringAngle], 64);
+		// How hard boids are drawn to their places: harder as the ring tenses, so they keep up.
+		F[68] = 6 / Math.max(f.ringScale, 0.08);
+		F[69] = f.pushDecay;
 		this.device.queue.writeBuffer(this.simBuffer, 0, this.sim);
 	}
 

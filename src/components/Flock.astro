@@ -1,26 +1,165 @@
 ---
-// The murmuration, full-screen behind the page, with the settings tuned in /sandbox.
+// The murmuration, full-screen behind the page, with the settings tuned in /sandbox. It opens as a
+// loader: a ring that fills to 100% and bursts into the flock, and then says `flock:released` on
+// the window. Without WebGPU there is no flock and no loader, and it says so at once.
+//
+// The page lives in the flock's space. Scrolling flies the camera through the flock and past it,
+// and every element with `data-depth` (world units from the flock's middle, toward the camera) is
+// placed in that space with CSS perspective, so it moves exactly as the boids around it do. It
+// shows at its laid-out size when it is `data-at` world units from the camera (by default, where it
+// starts), and fades in from `data-fade` × D away (3 by default). Behind the flock's middle
+// (negative depth) it lies under the canvas, and the boids fly in front of it. The page gives
+// itself the scroll length the flight needs (FLY, PAST in params). The flight ends
+// `data-flight-end` screens down (on <body>): there the camera stops, and a plane marked
+// `data-recede` (in screens) zooms out a little and fades over that much more scrolling, as the
+// page slides over it.
 ---
 
 <canvas class="flock" aria-hidden="true"></canvas>
+<p class="percent" aria-hidden="true"></p>
 
 <script>
 	import { startBoids } from '../boids/app';
-	import { defaults } from '../boids/params';
+	import { defaults, FLY, PAST, STEP } from '../boids/params';
+
+	const FILL = 2600; // ms for the ring to fill, if the page is ready by then
+	const WAIT = 0.9; // where it waits until the page is
+	const BEAT = 350; // ms full before it bursts
+	const D = defaults.distance; // the camera's distance from the flock's middle, at rest
 
 	const canvas = document.querySelector<HTMLCanvasElement>('canvas.flock')!;
-	// Without WebGPU the page simply goes without; the background stays.
-	startBoids(canvas, { ...defaults }).catch(() => canvas.remove());
+	const percent = document.querySelector<HTMLElement>('.percent')!;
+	const html = document.documentElement;
+	html.classList.add('loading');
+	const released = () => {
+		scrollTo({ top: 0, behavior: 'instant' }); // whatever a reload tried, it starts at the hero
+		html.classList.remove('loading');
+		window.dispatchEvent(new Event('flock:released'));
+	};
+	const loaded = new Promise((done) => (document.readyState === 'complete' ? done(null) : addEventListener('load', done)));
+	// Screens scrolled to travel (1 = through the flock): FLY screens to get through, then STEP a screen.
+	const end = Number(document.body.dataset.flightEnd ?? Infinity);
+	const travel = () => {
+		const s = Math.min(Math.max(scrollY / innerHeight, 0), end);
+		return s <= FLY ? s / FLY : 1 + ((s - FLY) * STEP) / (D + PAST);
+	};
+
+	// The camera has a 60° view, so CSS's perspective (the eye's distance from the screen) is 0.866
+	// screen heights, and stands for D world units. A plane at depth w is translated (flown + w)
+	// toward the eye, which makes it look D / (D - flown - w) its size; scaled by at / D first, it
+	// is its laid-out size at `at` from the camera. It fades in from far away, and out as it nears
+	// the camera.
+	const planes = [...document.querySelectorAll<HTMLElement>('[data-depth]')];
+	const place = (flown: number) => {
+		const px = (innerHeight * 0.866) / D; // css px per world unit, at the screen
+		for (const plane of planes) {
+			const w = Number(plane.dataset.depth);
+			const at = Number(plane.dataset.at ?? D - w);
+			const dist = D - flown - w;
+			// Gone soon once passed: out as it comes nearer than where it rests, gone by 0.6 of that.
+			const near = Math.min(Math.max((dist - 0.6 * at) / (0.35 * at), 0), 1);
+			const from = Number(plane.dataset.fade ?? 3); // fades in from `fade` × D, fully by 0.8 D nearer
+			const far = Math.min(Math.max((from * D - dist) / (0.8 * D), 0), 1);
+			const eye = (innerHeight * 0.866).toFixed(2);
+			const span = Number(plane.dataset.recede ?? 0);
+			const recede = span ? Math.min(Math.max((scrollY / innerHeight - end) / span, 0), 1) : 0;
+			const seen = near * far * (1 - recede);
+			plane.style.transform = `perspective(${eye}px) translateZ(${((flown + w) * px).toFixed(2)}px) scale(${((at / D) * (1 - 0.12 * recede)).toFixed(4)})`;
+			plane.style.zIndex = w < 0 ? '0' : '2'; // either side of the canvas (1)
+			plane.style.opacity = String(seen);
+			plane.style.visibility = seen > 0.001 ? 'visible' : 'hidden';
+			// Only what you are reading can be clicked or selected, not the faint ones about it.
+			plane.inert = seen < 0.5;
+		}
+	};
+	place(0);
+	const fly = () => place(travel() * (D + PAST));
+
+	startBoids(canvas, { ...defaults }, { held: true, onFlown: place })
+		.then((flock) => {
+			let ready = false;
+			Promise.all([loaded, document.fonts.ready]).then(() => (ready = true));
+			const start = performance.now();
+			let full: number | null = null;
+			flock.progress(0);
+
+			const tick = (now: number) => {
+				// The fake part: an eased curve over FILL. The true part: it holds at WAIT until ready.
+				const t = Math.min((now - start) / FILL, 1);
+				const p = Math.min(1 - (1 - t) ** 3, ready ? 1 : WAIT);
+				flock.progress(p);
+				percent.textContent = `${Math.floor(p * 100)}%`;
+				if (p >= 1) full ??= now;
+				if (full !== null && now - full > BEAT) {
+					flock.release();
+					percent.classList.add('gone');
+					released();
+					const steer = () => flock.travel(travel());
+					addEventListener('scroll', steer, { passive: true });
+					steer();
+				} else {
+					requestAnimationFrame(tick);
+				}
+			};
+			requestAnimationFrame(tick);
+		})
+		.catch(() => {
+			// No flock: the page still flies, straight from the scroll.
+			canvas.remove();
+			percent.remove();
+			released();
+			addEventListener('scroll', fly, { passive: true });
+			addEventListener('resize', fly);
+			fly();
+		});
 </script>
 
 <style>
+	/* Above the planes behind the flock, under those in front of it, and never in the pointer's way.
+	   (Not below zero: the page's body would then stand in front of whatever lies behind it.) */
 	.flock {
 		position: fixed;
 		inset: 0;
-		z-index: -1;
+		z-index: 1;
 		display: block;
 		width: 100%;
 		height: 100%;
 		pointer-events: none;
+	}
+	/* In the middle of the ring, which is in the middle of the screen. */
+	.percent {
+		position: fixed;
+		inset: 0;
+		margin: 0;
+		display: grid;
+		place-items: center;
+		pointer-events: none;
+		font: 500 0.875rem / 1 ui-monospace, 'SF Mono', Menlo, monospace;
+		letter-spacing: 0.08em;
+		color: rgb(255 255 255 / 0.8);
+		font-variant-numeric: tabular-nums;
+		transition: opacity 0.4s;
+	}
+	.percent.gone {
+		opacity: 0;
+	}
+	:global(html.loading) {
+		overflow: hidden;
+	}
+	/* The page's planes, seen through the flock's camera. Each fills the screen and carries its own
+	   perspective, so planes behind the flock can lie under the canvas and those in front over it.
+	   Scrolling is only the camera's motion. While the loader runs, only it is seen. */
+	:global([data-depth]) {
+		position: fixed;
+		inset: 0;
+		will-change: transform, opacity;
+		/* Each fills the screen, so they let the pointer through; only their content takes it. */
+		pointer-events: none;
+	}
+	:global([data-depth] > *) {
+		pointer-events: auto;
+	}
+	:global(html.loading [data-depth]) {
+		visibility: hidden !important;
 	}
 </style>

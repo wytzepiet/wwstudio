@@ -104,11 +104,61 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
 	// Capped at maxAccel (the old site's limit(…, 0.2) is maxAccel = 6 × maxSpeed), and always
 	// flying at exactly maxSpeed, as there.
 	let steer = clampLength(force * 30.0 * sim.maxSpeed, sim.maxAccel);
-	let vel = normalize(v + steer * sim.dt) * sim.maxSpeed;
+	var vel = normalize(v + steer * sim.dt) * sim.maxSpeed;
+
+	// The loader. Held, each boid has its own place on a ring facing the camera, fixed by its id. The
+	// ring fills clockwise from the top as `progress` goes to 1. A boid whose place is not filled
+	// yet rides in the head, a bright knot at the leading end, and drops off into its place as the
+	// head passes it: so the loader starts as one blinding point holding every boid, and draws the
+	// ring like a comet laying down its trail. The stroke has round ends (they draw in over the last
+	// few percent, so the closed ring has no seam), and each boid circles the stroke's core at its
+	// own pace, so it twists like a rope. Full, the ring spins. `hold` blends all of this in and
+	// back out of the flock.
+	let who = u32(me.vel.w);
+	var present = 1.0;
+	if (sim.hold > 0.0) {
+		let rand = vec4f(vec4u(pcg(who), pcg(who ^ 0x5bd1e995u), pcg(who ^ 0x27d4eb2du), pcg(who ^ 0x165667b1u)) % vec4u(65536u)) / 65536.0;
+		let thick = sim.ringRadius * 0.07;
+		let cap = thick * (1.0 - smoothstep(0.95, 1.0, sim.progress));
+		let arc = sim.progress * 6.2831853 * sim.ringRadius;
+		let s = rand.x * 6.2831853 * sim.ringRadius; // its place along the whole ring
+		let filled = s <= arc;
+		let past = max(max(cap - s, s - (arc - cap)), 0.0);
+		let width = sqrt(max(thick * thick - past * past, 0.0));
+		let a = 1.5707963 - s / sim.ringRadius - sim.ringAngle;
+		let b = rand.y * 6.2831853 + sim.time * (rand.w - 0.5) * 3.0;
+		let tube = width * sqrt(rand.z);
+		let around = vec3f(cos(a), sin(a), 0.0);
+		var place = sim.goal + around * (sim.ringRadius + tube * cos(b)) + vec3f(0.0, 0.0, tube * sin(b));
+		if (!filled) {
+			// In the head: somewhere in a ball round the leading end, a little ahead of the stroke.
+			let tip = 1.5707963 - arc / sim.ringRadius - sim.ringAngle;
+			let off = normalize(vec3f(rand.y, rand.z, rand.w) * 2.0 - 1.0 + 1e-3) * pow(rand.z, 0.33);
+			place = sim.goal + vec3f(cos(tip), sin(tip), 0.0) * sim.ringRadius + off * thick * 1.6;
+		}
+		// While the ring fills, seen only once it is near: from further away (where it started, say)
+		// it comes unseen. Once full, everyone is seen: the ring tensing and bursting flings boids far
+		// from their places, and they must not fade out for it.
+		if (sim.progress < 1.0) {
+			present = 1.0 - smoothstep(thick * 5.0, thick * 9.0, distance(p, place));
+		}
+		let orbit = vec3f(sin(a), -cos(a), 0.0) * sim.ringRadius * sim.ringSpin * step(1.0, sim.progress);
+		vel = mix(vel, (place - p) * sim.ringPull + orbit, sim.hold);
+	}
+	// Fades in and out over about a fifth of a second.
+	let presence = mix(me.push.w, present, 1.0 - exp(-sim.dt * 8.0));
+
+	// The release: one frame's kick outward from the ring's middle, which the push then lets fade.
+	var kick = vec3f(0.0);
+	if (sim.burst > 0.0) {
+		let fromMiddle = p - sim.goal;
+		let jitter = f32(pcg(who ^ sim.frame) % 1024u) / 1024.0;
+		kick = fromMiddle / max(length(fromMiddle), 1e-3) * sim.burst * (0.6 + 0.8 * jitter);
+	}
 
 	// The pointer, as on the old site: boids near the segment it swept this frame (on screen) get
 	// a push along its motion and away from it, kept apart from their own velocity and decaying.
-	var push = me.push.xyz * exp(-sim.dt * 4.35);
+	var push = me.push.xyz * exp(-sim.dt * sim.pushDecay) + kick;
 	let clip = sim.viewProj * vec4f(p, 1.0);
 	if (sim.mouseOn > 0.0 && clip.w > 0.0) {
 		let aspect = vec2f(sim.aspect, 1.0);
@@ -123,10 +173,12 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
 			let perNdc = clip.w * sim.tanHalfFov; // world units per NDC unit at this depth
 			let drag = (sim.camRight * sim.mouseVel.x * sim.aspect + sim.camUp * sim.mouseVel.y) * perNdc;
 			let outward = (sim.camRight * away.x + sim.camUp * away.y) / max(dist, 1e-4);
-			push += (drag + outward * length(drag) * 0.6) * f * f * sim.wMouse * sim.dt * 6.0;
-			push = clampLength(push, sim.maxSpeed * 4.0);
+			// The mouse may build the push up to 4 × maxSpeed, but never cut back one already faster
+			// (a burst's), or a cursor at rest would stand in the blast like a wall.
+			let cap = max(length(push), sim.maxSpeed * 4.0);
+			push = clampLength(push + (drag + outward * length(drag) * 0.6) * f * f * sim.wMouse * sim.dt * 6.0, cap);
 		}
 	}
 
-	boids[i] = Boid(vec4f(p + (vel + push) * sim.dt, seen), vec4f(vel, 0.0), vec4f(push, 0.0));
+	boids[i] = Boid(vec4f(p + (vel + push) * sim.dt, seen), vec4f(vel, me.vel.w), vec4f(push, presence));
 }

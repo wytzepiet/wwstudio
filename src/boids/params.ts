@@ -1,3 +1,9 @@
+/** The flight: scrolling FLY screens takes the camera through the flock to PAST beyond its middle
+ *  (world units); each screen after that flies on STEP. */
+export const FLY = 2.2;
+export const PAST = 1400;
+export const STEP = 900;
+
 /** World units: the flock lives in a box this big, centred on the origin. */
 export const box = [1600, 1000, 1000] as const;
 
@@ -32,6 +38,10 @@ export const defaults = {
 	wanderScale: 940,
 	wanderSpeed: 0.4,
 	bounds: 0.5,
+	/** The loader: the ring the boids are held in before they burst into the flock. */
+	ringRadius: 220,
+	ringSpin: 0.6,
+	burst: 6500,
 	mouse: 2.1,
 	mouseRadius: 0.3,
 	size: 0.5,
@@ -93,6 +103,9 @@ export const sliders: { group: string; items: Slider[] }[] = [
 			{ key: 'wander', min: 0, max: 3, step: 0.01, hint: 'Strength of the invisible swirling currents that tear the flock into strands.' },
 			{ key: 'wanderScale', min: 100, max: 3000, step: 10, hint: 'Size of the currents. Small: choppy little swirls. Large: broad sweeps.' },
 			{ key: 'wanderSpeed', min: 0, max: 2, step: 0.01, hint: 'How fast the currents themselves change.' },
+			{ key: 'ringRadius', min: 50, max: 600, step: 5, hint: 'The loader: the radius of the ring the boids are held in before they burst out (world units).' },
+			{ key: 'ringSpin', min: 0, max: 3, step: 0.05, hint: 'How fast the loader ring spins (radians a second).' },
+			{ key: 'burst', min: 0, max: 3000, step: 10, hint: 'How hard the ring bursts outward on release (world units a second). It dies away fast, so this mostly sets how far the blast reaches.' },
 			{ key: 'bounds', min: 0, max: 5, step: 0.05, hint: 'How hard the box’s invisible walls push boids back in.' },
 			{ key: 'mouse', min: 0, max: 5, step: 0.05, hint: 'How hard the cursor pushes boids along and away from its path.' },
 			{ key: 'mouseRadius', min: 0.02, max: 0.6, step: 0.01, hint: 'How wide the cursor reaches, as a fraction of half the screen’s height.' }

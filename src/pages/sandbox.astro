@@ -18,6 +18,10 @@
 			<div class="row" title="Colour of boids far from the camera."><label>far</label><input type="color" data-color="farColor" /></div>
 			<div class="row" title="What everything sits on; the old site’s navy by default."><label>background</label><input type="color" data-color="background" /></div>
 			<div class="buttons">
+				<button id="gather" title="Draw the flock into the loader ring.">gather</button>
+				<button id="release" title="Let the ring burst into the flock.">release</button>
+			</div>
+			<div class="buttons">
 				<button id="copy">copy</button>
 				<button id="reset">reset</button>
 				<button id="hide">hide</button>
@@ -26,7 +30,7 @@
 		<p id="error" hidden></p>
 
 		<script>
-			import { startBoids } from '../boids/app';
+			import { startBoids, type Stats } from '../boids/app';
 			import { defaults, palettes, sliders, type Params } from '../boids/params';
 
 			const STORE = 'boids-sandbox-3';
@@ -39,12 +43,16 @@
 					return { ...defaults };
 				}
 			};
+			// The canvas is see-through: the background is the page's.
+			const paintBackground = () => (document.body.style.background = params.background);
 			const save = () => {
+				paintBackground();
 				try {
 					localStorage.setItem(STORE, JSON.stringify(params));
 				} catch {}
 			};
 			const params = load();
+			document.body.style.background = params.background;
 			// For tuning from the console.
 			Object.assign(window, { params });
 			const $ = <T extends Element>(s: string) => document.querySelector(s) as T;
@@ -130,7 +138,7 @@
 			});
 
 			const stats = $<HTMLPreElement>('#stats');
-			startBoids($<HTMLCanvasElement>('#boids'), params, (s) => {
+			const onStats = (s: Stats) => {
 				const lines = [
 					`${s.fps.toFixed(0)} fps`,
 					`${s.count.toLocaleString()} boids`,
@@ -144,7 +152,13 @@
 					lines.push('', 'no timestamp-query: GPU times unavailable');
 				}
 				stats.textContent = lines.join('\n');
-			}).catch((e: Error) => {
+			};
+			startBoids($<HTMLCanvasElement>('#boids'), params, { onStats })
+				.then((flock) => {
+					$<HTMLButtonElement>('#gather').onclick = () => flock.gather();
+					$<HTMLButtonElement>('#release').onclick = () => flock.release();
+				})
+				.catch((e: Error) => {
 				const error = $<HTMLParagraphElement>('#error');
 				error.textContent = e.message;
 				error.hidden = false;

@@ -76,12 +76,14 @@ fn vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> Out {
 	let t = 1.0 / (1.0 + exp(-x * view.depthSharpness));
 	let hsl = mix(rgbToHsl(view.nearColor.rgb), rgbToHsl(view.farColor.rgb), t);
 	let intensity = mix(view.nearColor.a, view.farColor.a, t);
-	let glow = clamp((b.pos.w - view.glowFrom) / view.glowRange, view.minGlow, 1.0);
+	let glow = clamp((b.pos.w - view.glowFrom) / view.glowRange, view.minGlow, 1.0) * b.push.w;
 
 	var out: Out;
 	out.pos = view.viewProj * vec4f(world, 1.0);
 	out.uv = q;
-	out.color = hslToRgb(hsl) * intensity * glow;
+	// Boids right by the camera fade out, instead of filling the screen as they fly past it.
+	let close = smoothstep(15.0, 120.0, dist);
+	out.color = hslToRgb(hsl) * intensity * glow * close;
 	return out;
 }
 

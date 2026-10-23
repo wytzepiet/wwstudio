@@ -2,8 +2,10 @@
 // upsample added back up the chain. The composite is the old site's: the 8-bit scene × gain plus
 // an oversaturated bloom, each channel eased toward 1 on its own, written out as is (the light was
 // added as sRGB values, so there is no gamma to apply). `fade` is its dim pass: last frame × fade,
-// minus cut, so trails end instead of leaving a haze. The old canvas was transparent over a deep
-// navy page, with a fog of that navy over its lower half; `background` and `horizon` are those.
+// minus cut, so trails end instead of leaving a haze. The canvas is see-through (premultiplied):
+// light is as opaque as it is bright, so the page behind shows in the dark, as the old site's
+// transparent canvas did over its navy page. `horizon` is that page's colour (`background`) fogging
+// the lower half, over the light and whatever is behind it.
 
 struct Post {
 	strength: f32, gain: f32, time: f32, fade: f32,
@@ -79,11 +81,10 @@ fn composite(in: Out) -> @location(0) vec4f {
 	var bloom = textureSampleLevel(bloomTex, filtering, in.uv, 0.0).rgb;
 	let gray = dot(bloom, vec3f(0.2126, 0.7152, 0.0722));
 	bloom = max(mix(vec3f(gray), bloom, post.saturation), vec3f(0.0));
-	let c = 1.0 - exp(-(scene * post.gain + bloom * post.strength));
-	// The page's colour showed through wherever the canvas was dark: light added onto it.
-	var out = min(c + post.background.rgb, vec3f(1.0));
+	let c = clamp(1.0 - exp(-(scene * post.gain + bloom * post.strength)) + dither(in.pos.xy) / 255.0, vec3f(0.0), vec3f(1.0));
+	let light = vec4f(c, max(c.r, max(c.g, c.b)));
 	// The fog: the page's colour at the bottom, gone by the middle (the old gradient, 1.25× tall).
 	let up = 1.0 - in.uv.y;
-	out = mix(out, post.background.rgb, clamp(1.0 - (up + 0.125) / 0.625, 0.0, 1.0) * post.horizon);
-	return vec4f(out + dither(in.pos.xy) / 255.0, 1.0);
+	let fog = clamp(1.0 - (up + 0.125) / 0.625, 0.0, 1.0) * post.horizon;
+	return light * (1.0 - fog) + vec4f(post.background.rgb, 1.0) * fog;
 }

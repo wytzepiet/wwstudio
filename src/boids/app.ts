@@ -2,7 +2,19 @@ import { mat4, vec3 } from 'wgpu-matrix';
 import { Flock } from './flock';
 import { Renderer } from './renderer';
 import { GpuTimer } from './timer';
-import { box, type Params } from './params';
+import { box, PAST, type Params } from './params';
+
+/**
+ * The loader: `gather` draws the flock into the ring, `progress` fills it (0 to 1; the ring spins
+ * once full), `release` lets it burst out. `travel` flies the camera forward through the flock and
+ * past it: 0 in front, 1 at PAST beyond its middle, and on at that rate (see `flight` in params).
+ */
+export interface FlockControl {
+	gather(): void;
+	progress(p: number): void;
+	release(): void;
+	travel(t: number): void;
+}
 
 export interface Stats {
 	fps: number;
@@ -21,9 +33,23 @@ const hexColor = (hex: string, intensity: number): [number, number, number, numb
 
 /**
  * Runs the flock on `canvas` until the page goes away. Params are read live every frame, so whoever
- * holds them can change them. Throws if the browser has no WebGPU.
+ * holds them can change them. With `held`, it starts as the loader ring. Throws if the browser has
+ * no WebGPU.
  */
-export async function startBoids(canvas: HTMLCanvasElement, params: Params, onStats?: (s: Stats) => void) {
+export async function startBoids(
+	canvas: HTMLCanvasElement,
+	params: Params,
+	{
+		held = false,
+		onStats,
+		onFlown
+	}: {
+		held?: boolean;
+		onStats?: (s: Stats) => void;
+		/** Every frame: how far the camera has flown toward and past the flock, in world units. */
+		onFlown?: (flown: number) => void;
+	} = {}
+): Promise<FlockControl> {
 	if (!navigator.gpu) throw new Error('WebGPU is not available in this browser.');
 	const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
 	if (!adapter) throw new Error('No WebGPU adapter found.');
@@ -34,7 +60,8 @@ export async function startBoids(canvas: HTMLCanvasElement, params: Params, onSt
 
 	const context = canvas.getContext('webgpu')!;
 	const format = navigator.gpu.getPreferredCanvasFormat();
-	context.configure({ device, format, alphaMode: 'opaque' });
+	// See-through where there is no light, so whatever lies behind the canvas shows in the gaps.
+	context.configure({ device, format, alphaMode: 'premultiplied' });
 
 	const timer = timing ? new GpuTimer(device, ['sort', 'flock', 'draw', 'bloom']) : null;
 	const renderer = new Renderer(device, format);
@@ -75,6 +102,35 @@ export async function startBoids(canvas: HTMLCanvasElement, params: Params, onSt
 	let goalAngle = Math.random() * Math.PI * 2;
 	let nextHop = 0;
 
+	// The loader. The hold lets go fast and gathers slowly; a release also kicks once.
+	let holdTo = held ? 1 : 0;
+	let hold = holdTo;
+	let burst = 0;
+	let progress = 1;
+	let ringAngle = 0;
+	// A release first tenses: the ring draws in by TENSION over TENSE ms, slowly and then faster
+	// (ease-in), then bursts. The burst's kick dies away BLAST_DECAY times a second for BLAST ms,
+	// much faster than a mouse push, so the blast is quick and short.
+	const TENSE = 700;
+	const BLAST = 600;
+	const BLAST_DECAY = 10;
+	const TENSION = 1; // all the way in, to a point
+	const COLLAPSED = 150; // ms held at the point, so every boid gets there before the burst
+	let tensing: number | null = null;
+	let ringScale = 1;
+	// The burst spreads the boids thin: too thin to glow by their crowding (see glowFrom), and over so
+	// much more of the screen that the light, which adds up, thins out too. So for a while everyone
+	// glows regardless, and brighter (AFTERGLOW_GAIN ×): fully for GLOW_HOLD ms, then fading back
+	// over GLOW_FADE, as the flock draws together again.
+	const GLOW_HOLD = 1000;
+	const GLOW_FADE = 1500;
+	const AFTERGLOW_GAIN = 2.5;
+	let burstAt: number | null = null;
+	let afterglow = 0;
+
+	let travelTo = 0;
+	let travel = 0;
+
 	let frame = 0;
 	let last = performance.now();
 	let fps = 60;
@@ -90,11 +146,32 @@ export async function startBoids(canvas: HTMLCanvasElement, params: Params, onSt
 		const simDt = dt * params.tempo;
 		simTime += simDt;
 
+		hold += (holdTo - hold) * (1 - Math.exp(-dt * (holdTo > hold ? 2 : 8)));
+		if (hold < 0.002) hold = 0;
+		if (progress >= 1) ringAngle += params.ringSpin * simDt;
+		if (burstAt !== null) {
+			const k = Math.min(Math.max((now - burstAt - GLOW_HOLD) / GLOW_FADE, 0), 1);
+			afterglow = 1 - k * k * (3 - 2 * k);
+			if (k >= 1) burstAt = null;
+		}
+		if (tensing !== null) {
+			const k = Math.min((now - tensing) / TENSE, 1);
+			ringScale = 1 - TENSION * k * k * k;
+			if (now - tensing >= TENSE + COLLAPSED) {
+				tensing = null;
+				ringScale = 1;
+				holdTo = 0;
+				burst = params.burst;
+				burstAt = now;
+			}
+		}
+		// Held, the goal waits in the middle, where the ring is; after a release it waits a moment more.
+		if (hold > 0) nextHop = simTime + 1.5;
 		if (simTime > nextHop) {
 			goalAngle += (0.5 + Math.random()) * Math.PI;
 			nextHop = simTime + 2 + Math.random() * 2;
 		}
-		const goalTo = [Math.cos(goalAngle) * box[0] * 0.18, Math.sin(goalAngle) * box[1] * 0.18, 0];
+		const goalTo = hold > 0 ? [0, 0, 0] : [Math.cos(goalAngle) * box[0] * 0.18, Math.sin(goalAngle) * box[1] * 0.18, 0];
 		// The old site's goal jumped; this one glides there, about goalGlide seconds to get most of the way.
 		vec3.lerp(goal, goalTo, params.goalGlide > 0 ? 1 - Math.exp(-simDt / params.goalGlide) : 1, goal);
 
@@ -103,13 +180,19 @@ export async function startBoids(canvas: HTMLCanvasElement, params: Params, onSt
 		look.y += ((pointer.on ? pointer.y : 0) - look.y) * ease;
 		const yaw = look.x * 0.2;
 		const pitch = look.y * 0.12;
-		const camPos = vec3.create(
+		const orbit = vec3.create(
 			params.distance * Math.sin(yaw) * Math.cos(pitch),
 			params.distance * Math.sin(pitch),
 			params.distance * Math.cos(yaw) * Math.cos(pitch)
 		);
+		// Looking at the flock's middle, and flying that way as `travel` goes to 1.
+		travel += (travelTo - travel) * (1 - Math.exp(-dt * 12));
+		const ahead = vec3.normalize(vec3.negate(orbit));
+		const flown = travel * (params.distance + PAST);
+		onFlown?.(flown);
+		const camPos = vec3.addScaled(orbit, ahead, flown);
 		const aspect = canvas.width / canvas.height;
-		const viewMat = mat4.lookAt(camPos, [0, 0, 0], [0, 1, 0]);
+		const viewMat = mat4.lookAt(camPos, vec3.add(camPos, ahead), [0, 1, 0]);
 		const viewProj = mat4.multiply(mat4.perspective(FOV, aspect, 10, 5000), viewMat);
 		const camRight = vec3.create(viewMat[0], viewMat[4], viewMat[8]);
 		const camUp = vec3.create(viewMat[1], viewMat[5], viewMat[9]);
@@ -132,6 +215,12 @@ export async function startBoids(canvas: HTMLCanvasElement, params: Params, onSt
 			time: simTime,
 			frame,
 			goal,
+			hold,
+			burst,
+			progress,
+			ringAngle,
+			ringScale,
+			pushDecay: burstAt !== null && now - burstAt < BLAST ? BLAST_DECAY : 4.35,
 			viewProj,
 			camRight,
 			camUp,
@@ -156,16 +245,17 @@ export async function startBoids(canvas: HTMLCanvasElement, params: Params, onSt
 				// pixels, whatever the window's height), which is this many world units half-wide.
 				size: (params.size * 1000 * tanHalfFov) / canvas.clientHeight,
 				falloff: params.falloff,
-				nearColor: hexColor(params.nearColor, params.intensity),
-				farColor: hexColor(params.farColor, params.intensity),
+				nearColor: hexColor(params.nearColor, params.intensity * (1 + (AFTERGLOW_GAIN - 1) * afterglow)),
+				farColor: hexColor(params.farColor, params.intensity * (1 + (AFTERGLOW_GAIN - 1) * afterglow)),
 				depthSharpness: params.depthSharpness,
 				streak: params.streak,
 				glowFrom: params.glowFrom,
 				glowRange: params.glowRange,
-				minGlow: params.minGlow,
+				minGlow: Math.max(params.minGlow, afterglow),
 				maxSpeed: params.maxSpeed,
-				depthNear: params.distance - box[2] / 2,
-				depthFar: params.distance + box[2] / 2,
+				// Colour by depth in the flock, not from the camera, so it holds as the camera flies in.
+				depthNear: params.distance - flown - box[2] / 2,
+				depthFar: params.distance - flown + box[2] / 2,
 				// The old site faded by a fixed factor per frame; this is that factor at 60 fps.
 				fade: params.fade ** (dt * 60),
 				cut: params.cut * dt * 60,
@@ -183,6 +273,7 @@ export async function startBoids(canvas: HTMLCanvasElement, params: Params, onSt
 		device.queue.submit([encoder.finish()]);
 		timer?.read();
 
+		burst = 0;
 		if (onStats && frame % 10 === 0) {
 			onStats({ fps, gpu: timer?.ms ?? null, count: flock.count, cells: flock.cells, dims: flock.dims });
 		}
@@ -190,4 +281,17 @@ export async function startBoids(canvas: HTMLCanvasElement, params: Params, onSt
 		requestAnimationFrame(loop);
 	};
 	requestAnimationFrame(loop);
+
+	return {
+		gather: () => (holdTo = 1),
+		travel: (t) => (travelTo = Math.max(t, 0)),
+		progress: (p) => {
+			progress = Math.min(Math.max(p, 0), 1);
+			if (progress < 1) ringAngle = 0;
+		},
+		release: () => {
+			if (holdTo === 0 || tensing !== null) return;
+			tensing = performance.now();
+		}
+	};
 }

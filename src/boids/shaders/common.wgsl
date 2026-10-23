@@ -2,8 +2,8 @@
 
 struct Boid {
 	pos: vec4f,  // w: how many neighbours it sees, for the renderer
-	vel: vec4f,  // its own flying velocity
-	push: vec4f, // what the pointer adds on top, decaying
+	vel: vec4f,  // its own flying velocity; w: its id, which survives the sorting
+	push: vec4f, // what the pointer adds on top, decaying; w: how present it is, 0 unseen to 1
 }
 
 struct Sim {
@@ -18,8 +18,10 @@ struct Sim {
 	mouseVel: vec2f, mouseOn: f32, mouseRadius: f32,
 	time: f32, maxPerCell: u32, frame: u32, wSeek: f32,
 	maxSpeed: f32, maxAccel: f32, wSep: f32, wAli: f32,
-	wCoh: f32, wBounds: f32, wMouse: f32, _a: f32,
-	wWander: f32, wanderScale: f32, wanderSpeed: f32, _b: f32,
+	wCoh: f32, wBounds: f32, wMouse: f32, hold: f32,
+	wWander: f32, wanderScale: f32, wanderSpeed: f32, burst: f32,
+	ringRadius: f32, ringSpin: f32, progress: f32, ringAngle: f32, // the loader
+	ringPull: f32, pushDecay: f32, _b: f32, _c: f32,
 }
 
 @group(0) @binding(0) var<uniform> sim: Sim;
