@@ -1,0 +1,26 @@
+---
+// The murmuration, full-screen behind the page, with the settings tuned in /sandbox.
+---
+
+<canvas class="flock" aria-hidden="true"></canvas>
+
+<script>
+	import { startBoids } from '../boids/app';
+	import { defaults } from '../boids/params';
+
+	const canvas = document.querySelector<HTMLCanvasElement>('canvas.flock')!;
+	// Without WebGPU the page simply goes without; the background stays.
+	startBoids(canvas, { ...defaults }).catch(() => canvas.remove());
+</script>
+
+<style>
+	.flock {
+		position: fixed;
+		inset: 0;
+		z-index: -1;
+		display: block;
+		width: 100%;
+		height: 100%;
+		pointer-events: none;
+	}
+</style>

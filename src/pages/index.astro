@@ -1,365 +1,49 @@
 ---
-import WebglCanvas from '../components/WebglCanvas.astro';
-
-import Me from '../images/me2.png';
-import Luca from '../images/luca.png';
-import Suiker from '../images/archief.png';
-import Podwalk from '../images/podwalk.jpg';
-import CatchControl from '../images/catchcontrol.webp';
-
-import PortfolioItem from '../components/PortfolioItem.astro';
-import Layout from '../layouts/Layout.astro';
-import { Image } from 'astro:assets';
-import TimelineItem from '@/components/TimelineItem.astro';
+import Flock from '../components/Flock.astro';
+import { defaults } from '../boids/params';
 ---
 
-<script>
-	import { gsap } from 'gsap';
-	import { SplitText } from 'gsap/SplitText';
-	import { ScrollTrigger } from 'gsap/ScrollTrigger';
-	import { Observer } from 'gsap/Observer';
-	import { RoughEase } from 'gsap/EasePack';
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Wytze Sligting</title>
+	</head>
+	<body style={`--background: ${defaults.background}`}>
+		<Flock />
+		<main>
+			<h1>
+				<span>Making is easy now.</span>
+				<span>Knowing what's good isn't.</span>
+			</h1>
+		</main>
 
-	import { query, createQuery } from '../utils/generalUtils';
-	import { scroller } from '@/utils/scroller';
-	import { MathUtils } from 'three';
-
-	gsap.registerPlugin(SplitText, ScrollTrigger, Observer, RoughEase);
-
-	const roughEase = 'rough({strength: 5, points: 10, template: power3.inOut, taper: both, randomize: true})';
-	const flickerVars = { duration: 1, opacity: 0, stagger: 0.007, ease: roughEase };
-
-	const navText = new SplitText('.nav', { type: 'chars, words' });
-	gsap.from(navText.chars, { ...flickerVars });
-	// gsap.from('.home-title h1', { duration: 2, delay: 1.2, ease: 'power4.out', scale: 0.2 });
-	// gsap.from('.home-title h1', { duration: 2, delay: 1.2, opacity: 0 });
-	const titleText = new SplitText('.home-title', { type: 'chars, words' });
-	gsap.from(titleText.chars, { ...flickerVars, delay: 3, duration: 1.5 });
-
-	const timelineItems = query.all('.scroll-timeline .item');
-	const timelineSize = timelineItems.length * 700;
-
-	export const tl = gsap.timeline({
-		scrollTrigger: { start: 0, end: timelineSize, scrub: 1.5 }
-	});
-
-	// tl.addLabel('start');
-	// tl.to('.home-title', { duration: 1, translateZ: 600, pointerEvents: 'none', ease: 'linear' });
-
-	timelineItems.forEach((item, i) => {
-		const queryItem = createQuery(item);
-		const itemTl = gsap.timeline({ paused: true });
-		const pop = { duration: 1, ease: 'power4.out' };
-
-		// queryItem.all('.image').forEach((img) => itemTl.from(img, { ...pop, rotate: 10, scale: 0.2 }, '<'));
-		// queryItem.all('.info').forEach((info) => itemTl.from(info, { ...pop, scale: 0.2 }, '<'));
-
-		// const { chars } = new SplitText(item.querySelectorAll('.animate-text'), { type: 'words, chars' });
-		// if (chars) itemTl.from(chars, flickerVars, '<');
-
-		const inner = queryItem.one('.inner');
-
-		const rotate = ({ x, y }: { x?: number; y?: number }) => {
-			if (!x || !y) return;
-			if (item.style.opacity == '0') return mouseObs.disable();
-
-			const rect = query.one('.scroll-timeline')!.getBoundingClientRect();
-			const onTl = x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
-
-			const scale = 8 / Math.max(window.innerWidth, window.innerHeight);
-			const rotateX = onTl ? (y - window.innerHeight / 2) * -scale : 0;
-			const rotateY = onTl ? (x - window.innerWidth / 2) * scale : 0;
-			gsap.to(inner, { duration: 0.5, rotateX, rotateY });
-		};
-
-		const mouseObs = Observer.create({ type: 'pointer', onMove: rotate });
-
-		window.addEventListener(
-			'deviceorientation',
-			(e) => {
-				const { beta, gamma } = e;
-				const x = ((beta || 0) / 180) * window.innerWidth;
-				const y = ((gamma || 0) / 90) * window.innerHeight;
-				rotate({ x, y });
-			},
-			true
-		);
-
-		const onStart = () => {
-			itemTl.restart();
-			mouseObs.enable();
-		};
-		const onReverseComplete = () => {
-			mouseObs.enable();
-		};
-
-		const linear = { ease: 'none', duration: 1 };
-
-		if (i > 0) {
-			tl.from(item, { ...linear, duration: 0.0001, pointerEvents: 'none' }, i == 0 ? '<' : '>');
-			tl.from(item, { ...linear, duration: 0.5, opacity: 0 });
-			tl.from(inner, { ...linear, translateZ: -600, onStart }, '<');
-		}
-
-		tl.addLabel(`item-${i}`);
-		if (i == timelineItems.length - 1) return;
-		tl.to(inner, { ...linear, translateZ: 600 });
-		tl.to(item, { ...linear, duration: 0.5, opacity: 0, onReverseComplete }, '<+0.5');
-		tl.to(item, { ...linear, duration: 0.0001, pointerEvents: 'none' });
-	});
-
-	tl.to('.canvas', { duration: 1, filter: 'blur(0px)', opacity: 0.8, ease: 'power1.inOut' }, '<');
-
-	tl.to('.canvas', { duration: 1.4, filter: 'blur(20px)', opacity: 0 }, 0.6);
-	tl.to('.canvas', { duration: 2, opacity: 0.2, ease: 'power2.in' }, 2.1);
-
-	const fullDuration = { duration: tl.totalDuration(), ease: 'none' };
-	const updateScrollPos = { onUpdate: () => scroller.update(tl.progress() * timelineSize) };
-	tl.to('.bottom-bar', { ...fullDuration, x: -timelineSize / 5, ...updateScrollPos }, 0);
-
-	let snapPoints = [0];
-	Object.values(tl.labels).forEach((labelTime, i) => {
-		const el = document.createElement('div');
-		query.one('.snap-points')!.appendChild(el);
-		const position = (labelTime / tl.totalDuration()) * timelineSize;
-		snapPoints.push(position);
-		el.classList.add('snap-point');
-		el.style.marginTop = `${position - snapPoints[i]}px`;
-	});
-	snapPoints.shift();
-
-	const snapTo = (pos: number) => scroller.to(snapPoints[MathUtils.clamp(pos, 0, snapPoints.length - 1)]);
-	const incrementSnapPos = (increment: number) => {
-		const dists = snapPoints.map((pos) => Math.abs(pos - scroller.top));
-		const current = dists.indexOf(Math.min(...dists));
-		snapTo(current + increment);
-	};
-
-	query.one('.back')?.addEventListener('click', () => incrementSnapPos(-1), true);
-	query.one('.next')?.addEventListener('click', () => incrementSnapPos(1), true);
-
-	query.one('.contact')?.addEventListener('click', () => snapTo(snapPoints.length - 1), true);
-
-	const dragBottomBar = (startPos: number) => {
-		if (!obs.isDragging || !obs.startX || !obs.x) return;
-		const target = startPos - (obs.x - obs.startX) * 5;
-		window.scrollBy(0, target - window.scrollY);
-		query.one('.bottom-bar')!.style.transform = `translateX(${MathUtils.clamp(target, 0, timelineSize) / -5}px)`;
-		requestAnimationFrame(() => dragBottomBar(startPos));
-	};
-	const obs = Observer.create({
-		target: '.bottom-bar-wrapper',
-		type: 'pointer, touch',
-		tolerance: 0.0001,
-		onDragStart: () => {
-			document.body.classList.add('select-none');
-			dragBottomBar(window.scrollY);
-		},
-		onDragEnd: () => document.body.classList.remove('select-none')
-	});
-
-	Observer.create({
-		type: 'pointer',
-		onMove: ({ x, y }) => {
-			if (!x || !y) return;
-			const { top, left } = query.one('.fixed-content')!.getBoundingClientRect();
-			gsap.to('.mouse-border', { duration: 0.2, x: x - left, y: y - top });
-			gsap.to('.mouse-point', { duration: 0.01, x: x - left, y: y - top });
-		}
-	});
-
-	const html = query.one('html')!;
-	html.style.scrollBehavior = 'smooth';
-	html.style.scrollSnapType = 'y mandatory';
-</script>
-
-<Layout title="Wytze Sligting">
-	<div class="trigger"></div>
-	<div class="snap-points contents relative"></div>
-	<div class="snap-point h-screen"></div>
-
-	<style is:global lang="postcss">
-		 .snap-point {
-			@apply snap-start snap-always relative w-full min-h-[1px] mb-[-1px];  
-		}
-	</style>
-
-	<div
-		class="fixed-content cursor-none fixed overflow-hidden inset-0 p-2 flex gap-2 flex-col items-stretch justify-start z-30"
-	>
-		<div class="mouse mouse-border">
-			<div
-				class="absolute p-3 rounded-full border border-vibrant/25 bg-background/40 backdrop-blur-[2px] shadow-lg shadow-background/40"
-			>
-			</div>
-		</div>
-		<div class="mouse mouse-point">
-			<div class="absolute w-[6px] h-[6px] bg-foreground rounded-full"></div>
-		</div>
-		<style lang="postcss">
-			.mouse {
-				@apply z-30 pointer-events-none fixed w-0 h-0 inset-0 flex items-center justify-center
+		<style>
+			html,
+			body {
+				margin: 0;
+				min-height: 100%;
+				background: var(--background);
+				color: #fff;
+				font-family: system-ui, sans-serif;
+			}
+			main {
+				min-height: 100vh;
+				display: grid;
+				align-content: end;
+				padding: clamp(16px, 5vw, 64px);
+				box-sizing: border-box;
+			}
+			h1 {
+				margin: 0;
+				font-size: clamp(2.5rem, 7vw, 7rem);
+				font-weight: 800;
+				line-height: 0.95;
+				letter-spacing: -0.04em;
+			}
+			h1 span {
+				display: block;
 			}
 		</style>
-
-		<nav class="nav flex justify-between py-1 px-2 uppercase tracking-widest text-muted-foreground">
-			<p class="font-light">Wytze Sligting</p>
-			<p class="font-light opacity-50">|||</p>
-			<!-- <div>
-			<p>+ Home</p>
-			<p>Projects</p>
-			<p>About</p>
-		</div> -->
-			<p class="font-light">Creative developer</p>
-			<p class="font-light opacity-50">|||</p>
-			<p class="contact font-light cursor-pointer">Contact me</p>
-		</nav>
-
-		<div
-			class="scroll-timeline transform-style-3d perspective-1000 flex-grow overflow-hidden rounded-md border bg-background"
-		>
-			<!-- <Image src={sky} alt="" class="absolute inset-0 w-full h-full object-cover grayscale mix-blend-overlay" /> -->
-
-			<div class="canvas absolute pointer-events-none inset-0">
-				<WebglCanvas delay={500} />
-			</div>
-
-			<TimelineItem class="home-title">
-				<div class="h-screen w-screen flex flex-col items-center translate-z-7 transform-style-3d">
-					<div class="absolute inset-0 -scale-x-150 scale-y-125 bg-gradient-to-t from-background via-transparent"></div>
-					<div class="uppercase h-full pb-[10vh] flex flex-col gap-2 justify-end transform-style-3d">
-						<h1 class="text-4xl">I can't do magic.</h1>
-						<h1 class="text-5xl translate-z-4">But I can code.</h1>
-					</div>
-				</div>
-			</TimelineItem>
-			<TimelineItem class="about">
-				<div class="flex flex-col items-center transform-style-3d">
-					<div class="image overflow-hidden bg-background border rounded-md translate-z-4">
-						<Image src={Me} alt="" class="w-32 mix-blend-screen" width={600} />
-						<img
-							src="/noise2.gif"
-							alt=""
-							class="absolute inset-0 h-full w-full object-cover opacity-[0.1] mix-blend-luminosity pointer-events-none"
-						/>
-					</div>
-					<br />
-					<div class="animate-text text-center font-normal">
-						<p>Hey! I'm Wytze.</p>
-						<p>A freelance computer nerd</p>
-						<p>with an eye for design. I love</p>
-						<p>to make an idea come to life.</p>
-					</div>
-				</div>
-			</TimelineItem>
-
-			<TimelineItem>
-				<h1 class="work animate-text text-9xl uppercase grid grid-cols-2 text-center transform-style-3d">
-					<div class="translate-z-4">w</div>
-					<div class="translate-z-1">o</div>
-					<div>r</div>
-					<div class="translate-z-3">k</div>
-				</h1>
-			</TimelineItem>
-			<style>
-				h1.work > div {
-					margin: calc(-0.4 * var(--var-size));
-				}
-			</style>
-
-			<PortfolioItem
-				image={Luca}
-				title="Snakken naar Tichelaar"
-				description="A rebellious exhibition about ceramics"
-				tags={['Graphic design', 'Exposition design', 'Curation']}
-			/>
-			<PortfolioItem
-				image={Suiker}
-				title="Nationaal Suikerbieten archief"
-				description="An arhcive website about the history of Dutch sugar industry"
-				tags={['Web app', 'Solid.js', 'Supabase', 'Mux video']}
-			/>
-			<PortfolioItem
-				image={Podwalk}
-				title="Podwalk"
-				description="A historical GPS guided audiotour"
-				tags={['Mobile app', 'Flutter', 'GPS', 'Narration & sound design']}
-			/>
-			<!-- <PortfolioItem
-				image={Prins}
-				title="Café de Prins"
-				description="Revamping an iconic café and hotel"
-				tags={['Interior design', 'Brand identity', 'Graphic design']}
-			/> -->
-			<PortfolioItem
-				image={CatchControl}
-				title="Catch Control"
-				description="A monitoring app for nature enthousiasts"
-				tags={['Mobile app', 'Flutter', 'Firebase', 'Hardware integration']}
-			/>
-
-			<TimelineItem>
-				<div class="contact animate-text flex flex-col items-start transform-style-3d">
-					<h2 class="text-9xl uppercase translate-z-4 drop-shadow-lg">Let's<br />chat</h2>
-
-					<a href="mailto:hello@wytze.dev" class="pb-4 block relative transform-style-3d">
-						<div
-							class="rounded-md hover:bg-foreground/15 hover:translate-z-6 transition-all duration-200 backdrop-blur"
-						>
-							<div class="bg-background/50 rounded-md border">
-								<p class="text-foreground/65 p-2">
-									Contact me for full time jobs, <br />
-									freelance projects or just to <br />
-									say hello :-)
-								</p>
-								<div class="border-t px-2 py-1">
-									<p class="translate-z-3 block">hello@wytze.dev</p>
-								</div>
-							</div>
-						</div>
-					</a>
-				</div>
-			</TimelineItem>
-		</div>
-		<div class="flex gap-2">
-			<div class="back tl-control">back</div>
-			<div
-				class="bottom-bar-wrapper relative w-full overflow-hidden select-none rounded-md border cursor-grab active:cursor-grabbing"
-			>
-				<div class="bottom-bar flex gap-1 items-center w-[300rem] h-full">
-					<!-- {Array.from({ length: 1000 }).map(() => <div class="line" />)} -->
-					<svg width="100%" height="1.1rem">
-						<!-- {
-							Array.from({ length: 1000 }).map((_, i) => {
-								const x = `${i * 0.3}rem`;
-								const y1 = i % 10 == 0 ? '0' : '30%';
-								const y2 = i % 10 == 0 ? '100%' : '70%';
-								return <line x1={x} x2={x} {y1} {y2} class="stroke-muted-foreground/50" />;
-							})
-						} -->
-						<defs>
-							<pattern id="stripes" patternUnits="userSpaceOnUse" width="3rem" height="100%">
-								{
-									Array.from({ length: 10 }).map((_, i) => {
-										const x = `${i * 0.3 + 0.1}rem`;
-										const y1 = i % 10 == 0 ? '0' : '30%';
-										const y2 = i % 10 == 0 ? '100%' : '70%';
-										return <line x1={x} x2={x} {y1} {y2} class="stroke-muted-foreground/50" />;
-									})
-								}
-							</pattern>
-						</defs>
-						<rect width="100%" height="100%" fill="url(#stripes)"></rect>
-					</svg>
-				</div>
-				<div class="absolute inset-0 bg-gradient-to-r from-black/70 via-transparent to-black/70"></div>
-			</div>
-			<div class="next tl-control">next</div>
-			<style lang="postcss">
-				.tl-control {
-					@apply p-[0.4rem] rounded-md border bg-black text-muted-foreground/60 cursor-pointer select-none hover:bg-muted-foreground/15 active:bg-muted-foreground/25;
-				}
-			</style>
-		</div>
-	</div>
-</Layout>
+	</body>
+</html>
