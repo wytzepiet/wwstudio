@@ -18,7 +18,7 @@ const D = defaults.distance;
 const lines = [
 	{ label: 'Hi', text: "Hi, I'm Wytze, a developer in Rotterdam." },
 	{ label: 'What I build', text: 'I build websites, apps, backends and interactive things like the one you just flew through.' },
-	{ label: 'Code got cheap', text: 'Code got cheap.' },
+	{ label: 'Code got cheap', text: 'Writing code got cheap.' },
 	{ label: 'What I bring', text: "What didn't: telling good from bad, and how to put it into words." },
 	{ label: 'The work', text: 'Take a look at some of my work.' }
 ];
