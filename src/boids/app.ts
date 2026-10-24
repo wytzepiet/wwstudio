@@ -165,12 +165,13 @@ export async function startBoids(
 	let afterglow = 0;
 
 	// The first flight, through the flock to the first stop (travel 0 to 1), takes its own time however
-	// quick the page snaps there: it speeds up gently (ACCEL, in travel a second, each second) and
-	// brakes harder at the end (BRAKE), just enough to stop where it should, so it arrives with a short
-	// ease rather than creeping in. About a second all told. Past it, the camera keeps up with the
-	// scroll closely.
+	// quick the page snaps there: it speeds up gently (ACCEL, in travel a second, each second), and
+	// near the end it may go no faster than LAND × (how far is left)^0.6, so it slows as it arrives,
+	// the braking itself easing off to nothing: a soft landing, without a constant brake's sudden stop
+	// or a spring's long creep. About a second all told. Past it, the camera keeps up with the scroll
+	// closely.
 	const ACCEL = 2.5;
-	const BRAKE = 4.5;
+	const LAND = 3;
 	let travel = 0;
 	let travelSpeed = 0;
 
@@ -242,7 +243,7 @@ export async function startBoids(
 			const gap = travelTo - travel;
 			const dir = Math.sign(gap);
 			// Its speed toward where it is going (below 0 while it still moves the other way).
-			const toward = Math.min(travelSpeed * dir + ACCEL * dt, Math.sqrt(2 * BRAKE * Math.abs(gap)));
+			const toward = Math.min(travelSpeed * dir + ACCEL * dt, LAND * Math.abs(gap) ** 0.6);
 			travelSpeed = toward * dir;
 			const step = travelSpeed * dt;
 			// Arriving, it stops there rather than pass it.
