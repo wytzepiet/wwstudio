@@ -114,27 +114,44 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
 	// few percent, so the closed ring has no seam), and each boid circles the stroke's core at its
 	// own pace, so it twists like a rope. Full, the ring spins. `hold` blends all of this in and
 	// back out of the flock.
+	//
+	// It is alive, not drawn: the ring holds the boids only so hard, so their own flocking keeps them
+	// jostling in a loose band, and now and then a few let go, peel away and are pulled back; waves
+	// of birds surge round it, bunching into knots that swell outward; and it beats. All of it builds
+	// as the ring fills, and the moment it is full it holds still: the band drawn tight, the breath
+	// held, before the burst.
 	let who = u32(me.vel.w);
 	var present = 1.0;
 	if (sim.hold > 0.0) {
 		let rand = vec4f(vec4u(pcg(who), pcg(who ^ 0x5bd1e995u), pcg(who ^ 0x27d4eb2du), pcg(who ^ 0x165667b1u)) % vec4u(65536u)) / 65536.0;
-		let thick = sim.ringRadius * 0.07;
+		// How restless it is: building as it fills, and none once it is full.
+		let full = step(1.0, sim.progress);
+		let energy = smoothstep(0.0, 0.85, sim.progress) * (1.0 - full);
+		let beat = pow(max(sin(sim.time * 2.4 + sim.progress * 20.0), 0.0), 10.0) * energy;
+		let radius = sim.ringRadius * (1.0 + 0.05 * beat);
+		let thick = sim.ringRadius * 0.07 * (1.0 + 1.2 * energy);
 		let cap = thick * (1.0 - smoothstep(0.95, 1.0, sim.progress));
 		let arc = sim.progress * 6.2831853 * sim.ringRadius;
 		let s = rand.x * 6.2831853 * sim.ringRadius; // its place along the whole ring
 		let filled = s <= arc;
 		let past = max(max(cap - s, s - (arc - cap)), 0.0);
 		let width = sqrt(max(thick * thick - past * past, 0.0));
-		let a = 1.5707963 - s / sim.ringRadius - sim.ringAngle;
+		let a0 = 1.5707963 - s / sim.ringRadius - sim.ringAngle;
+		// The surges: waves running round it, shifting each boid along the ring toward the nearest
+		// crest (so they bunch there), and swelling the band where they are.
+		let wave = 3.0 * a0 - sim.time * (1.6 + 2.6 * sim.progress);
+		let surge = 0.3 + 0.7 * energy;
+		let a = a0 + 0.2 * surge * sin(wave) * (1.0 - full);
+		let swell = 1.0 + 1.2 * surge * max(cos(wave), 0.0) * (1.0 - full);
 		let b = rand.y * 6.2831853 + sim.time * (rand.w - 0.5) * 3.0;
-		let tube = width * sqrt(rand.z);
+		let tube = width * swell * sqrt(rand.z);
 		let around = vec3f(cos(a), sin(a), 0.0);
-		var place = sim.goal + around * (sim.ringRadius + tube * cos(b)) + vec3f(0.0, 0.0, tube * sin(b));
+		var place = sim.goal + around * (radius + tube * cos(b)) + vec3f(0.0, 0.0, tube * sin(b));
 		if (!filled) {
 			// In the head: somewhere in a ball round the leading end, a little ahead of the stroke.
 			let tip = 1.5707963 - arc / sim.ringRadius - sim.ringAngle;
 			let off = normalize(vec3f(rand.y, rand.z, rand.w) * 2.0 - 1.0 + 1e-3) * pow(rand.z, 0.33);
-			place = sim.goal + vec3f(cos(tip), sin(tip), 0.0) * sim.ringRadius + off * thick * 1.6;
+			place = sim.goal + vec3f(cos(tip), sin(tip), 0.0) * radius + off * thick * 1.6;
 		}
 		// While the ring fills, seen only once it is near: from further away (where it started, say)
 		// it comes unseen. Once full, everyone is seen: the ring tensing and bursting flings boids far
@@ -143,7 +160,11 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
 			present = 1.0 - smoothstep(thick * 5.0, thick * 9.0, distance(p, place));
 		}
 		let orbit = vec3f(sin(a), -cos(a), 0.0) * sim.ringRadius * sim.ringSpin * step(1.0, sim.progress);
-		vel = mix(vel, (place - p) * sim.ringPull + orbit, sim.hold);
+		// How hard it is held: less the more restless it is, firmly when full. A few at a time let go
+		// for a moment (each now and then, at its own time) and drift off with the flock.
+		let loose = smoothstep(0.9, 1.0, fract(rand.w * 13.0 + sim.time * 0.25)) * energy;
+		let grip = mix(1.0, 0.45, energy) * (1.0 - 0.9 * loose);
+		vel = mix(vel, (place - p) * sim.ringPull + orbit, sim.hold * grip);
 	}
 	// Fades in and out over about a fifth of a second.
 	let presence = mix(me.push.w, present, 1.0 - exp(-sim.dt * 8.0));
