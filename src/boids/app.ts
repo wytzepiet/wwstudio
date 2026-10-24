@@ -153,6 +153,7 @@ export async function startBoids(
 	// Where the surges running round the ring are (radians of their wave): it runs ahead ever faster
 	// as the ring fills and then draws in, so they end up racing round it.
 	let surgePhase = 0;
+	let full = 0;
 	// The burst spreads the boids thin: too thin to glow by their crowding (see glowFrom), and over so
 	// much more of the screen that the light, which adds up, thins out too. So for a while everyone
 	// glows regardless, and brighter (AFTERGLOW_GAIN ×): fully for GLOW_HOLD ms, then fading back
@@ -190,7 +191,8 @@ export async function startBoids(
 
 		hold += (holdTo - hold) * (1 - Math.exp(-dt * (holdTo > hold ? 2 : 8)));
 		if (hold < 0.002) hold = 0;
-		if (progress >= 1) ringAngle += params.ringSpin * simDt;
+		// Full, it turns: starting as it settles (see `full`), not all at once.
+		ringAngle += params.ringSpin * simDt * full;
 		if (burstAt !== null) {
 			const k = Math.min(Math.max((now - burstAt - GLOW_HOLD) / GLOW_FADE, 0), 1);
 			afterglow = 1 - k * k * (3 - 2 * k);
@@ -205,6 +207,9 @@ export async function startBoids(
 			const rampUp = Math.min(squeeze / 0.5, 1);
 			const speed = tensing !== null ? 9 + 51 * rampUp * rampUp * (3 - 2 * rampUp) : 1.6 + 7.4 * progress * progress;
 			if (hold > 0) surgePhase += speed * dt;
+			// Full, the ring settles over about half a second: the band drawing tight, the beat
+			// stopping, the grip firming and the spin starting, all together and smoothly.
+			full += ((progress >= 1 ? 1 : 0) - full) * (1 - Math.exp(-dt * 5));
 		}
 		if (tensing !== null) {
 			const k = Math.min((now - tensing) / TENSE, 1);
@@ -297,6 +302,7 @@ export async function startBoids(
 			ringAngle,
 			ringScale,
 			surgePhase,
+			full,
 			pushDecay: burstAt !== null && now - burstAt < BLAST ? BLAST_DECAY : 4.35,
 			viewProj,
 			camRight,

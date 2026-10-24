@@ -25,6 +25,8 @@ export interface Frame {
 	ringScale: number;
 	/** Where the surges running round the ring are, in radians of their wave. */
 	surgePhase: number;
+	/** How settled into being full the ring is: eased from 0 to 1 once it is, so nothing jumps. */
+	full: number;
 	/** How fast the push dies away, per second: faster just after a burst. */
 	pushDecay: number;
 	viewProj: Float32Array;
@@ -40,7 +42,7 @@ export interface Frame {
 
 const GROUP = 128;
 const BOID = 48; // bytes: pos, vel, push
-const SIM = 288; // bytes, the Sim struct
+const SIM = 304; // bytes, the Sim struct
 const groups = (n: number) => Math.ceil(n / GROUP);
 
 /**
@@ -159,6 +161,7 @@ export class Flock {
 		F[69] = f.pushDecay;
 		F[70] = 1 - f.ringScale;
 		F[71] = f.surgePhase;
+		F[72] = f.full;
 		this.device.queue.writeBuffer(this.simBuffer, 0, this.sim);
 	}
 

@@ -126,7 +126,7 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
 	if (sim.hold > 0.0) {
 		let rand = vec4f(vec4u(pcg(who), pcg(who ^ 0x5bd1e995u), pcg(who ^ 0x27d4eb2du), pcg(who ^ 0x165667b1u)) % vec4u(65536u)) / 65536.0;
 		// How restless it is: building as it fills, and none once it is full.
-		let full = step(1.0, sim.progress);
+		let full = sim.full;
 		let energy = smoothstep(0.0, 0.85, sim.progress) * (1.0 - full);
 		let beat = pow(max(sin(sim.time * 2.4 + sim.progress * 20.0), 0.0), 10.0) * energy;
 		let radius = sim.ringRadius * (1.0 + 0.05 * beat);
@@ -166,7 +166,7 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
 		if (sim.progress < 1.0) {
 			present = 1.0 - smoothstep(thick * 5.0, thick * 9.0, distance(p, place));
 		}
-		let orbit = vec3f(sin(a), -cos(a), 0.0) * sim.ringRadius * sim.ringSpin * step(1.0, sim.progress);
+		let orbit = vec3f(sin(a), -cos(a), 0.0) * sim.ringRadius * sim.ringSpin * sim.full;
 		// How hard it is held: less the more restless it is, firmly when full. A few at a time let go
 		// for a moment (each now and then, at its own time) and drift off with the flock.
 		let loose = smoothstep(0.9, 1.0, fract(rand.w * 13.0 + sim.time * 0.25)) * energy;

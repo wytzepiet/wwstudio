@@ -22,6 +22,7 @@ struct Sim {
 	wWander: f32, wanderScale: f32, wanderSpeed: f32, burst: f32,
 	ringRadius: f32, ringSpin: f32, progress: f32, ringAngle: f32, // the loader
 	ringPull: f32, pushDecay: f32, squeeze: f32, surgePhase: f32, // squeeze: how far the ring has drawn in, 0 to 1
+	full: f32, _x: f32, _y: f32, _z: f32, // full: how settled into being full the ring is, 0 to 1 (eased)
 }
 
 @group(0) @binding(0) var<uniform> sim: Sim;
