@@ -144,10 +144,10 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
 		let wave = 3.0 * a0 + sim.surgePhase;
 		// In the last moment of drawing in, as the ring becomes the point, the knots dissolve, so the
 		// burst flies out evenly all round instead of in three streams.
-		let surge = mix(0.3 + 0.7 * energy, 1.0, full) * (1.0 - smoothstep(0.9, 1.0, sim.squeeze));
+		let surge = mix(0.3 + 0.7 * energy, 1.0, full) * (1.0 - smoothstep(0.75, 1.0, sim.squeeze));
 		// Drawing in, the knots are packed harder and the gaps between them run nearly empty, and they
 		// swell less, so even on a small ring they stay apart and the spin shows.
-		let pack = mix(0.11, 0.31, smoothstep(0.0, 0.3, sim.squeeze));
+		let pack = mix(0.11, 0.25, smoothstep(0.0, 0.3, sim.squeeze));
 		let a = a0 + pack * surge * sin(wave);
 		let swell = 1.0 + mix(0.6, 0.4, sim.squeeze) * surge * max(cos(wave), 0.0);
 		let b = rand.y * 6.2831853 + sim.time * (rand.w - 0.5) * 3.0;
