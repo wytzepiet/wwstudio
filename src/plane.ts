@@ -5,7 +5,7 @@ import type { StageValue } from './stage';
 const D = defaults.distance; // the camera's distance from the flock's middle, at rest
 const clamp = (x: number) => Math.min(Math.max(x, 0), 1);
 /** A plane's title plays in once the camera is this close, against where the plane rests. */
-const ARRIVING = 1.3;
+const ARRIVING = 1.8;
 
 export interface PlaneOptions {
 	/** World units from the flock's middle toward the camera; behind it (negative), the boids fly
