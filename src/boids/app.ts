@@ -164,10 +164,13 @@ export async function startBoids(
 	let burstAt: number | null = null;
 	let afterglow = 0;
 
-	// The first flight, through the flock to the first stop (travel 0 to 1), follows the scroll on a
-	// spring (critically damped, FOLLOW its rate): however quick the page snaps there, it eases in and
-	// out and takes about 4 / FOLLOW seconds. Past it, the camera keeps up with the scroll closely.
-	const FOLLOW = 2;
+	// The first flight, through the flock to the first stop (travel 0 to 1), takes its own time however
+	// quick the page snaps there: it speeds up gently (ACCEL, in travel a second, each second) and
+	// brakes harder at the end (BRAKE), just enough to stop where it should, so it arrives with a short
+	// ease rather than creeping in. About a second all told. Past it, the camera keeps up with the
+	// scroll closely.
+	const ACCEL = 2.5;
+	const BRAKE = 7;
 	let travel = 0;
 	let travelSpeed = 0;
 
@@ -236,8 +239,15 @@ export async function startBoids(
 		// The flight goes on even while the flock is set into a scene, so the page's planes, which
 		// are placed by it, are where they should be however the page got there.
 		if (Math.max(travel, travelTo) <= 1.001) {
-			travelSpeed += (FOLLOW * FOLLOW * (travelTo - travel) - 2 * FOLLOW * travelSpeed) * dt;
-			travel += travelSpeed * dt;
+			const gap = travelTo - travel;
+			const dir = Math.sign(gap);
+			// Its speed toward where it is going (below 0 while it still moves the other way).
+			const toward = Math.min(travelSpeed * dir + ACCEL * dt, Math.sqrt(2 * BRAKE * Math.abs(gap)));
+			travelSpeed = toward * dir;
+			const step = travelSpeed * dt;
+			// Arriving, it stops there rather than pass it.
+			travel = Math.abs(step) >= Math.abs(gap) && toward > 0 ? travelTo : travel + step;
+			if (travel === travelTo) travelSpeed = 0;
 		} else {
 			const was = travel;
 			travel += (travelTo - travel) * (1 - Math.exp(-dt * 12));
