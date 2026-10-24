@@ -2,7 +2,7 @@ import { createMemo, createSignal, For, onSettled, Show, useContext } from 'soli
 import { createClock } from '../lib/frame';
 import { Stage } from '../stage';
 
-const AFTER_BURST = 1200; // ms after the loader bursts before the first letter
+const AFTER_BURST = 2200; // ms after the loader bursts before the first letter: a moment to take in the burst
 const UNPROMPTED = 8000; // ms after which it plays anyway, if there is no loader to wait for
 const TYPE_EVERY = 38; // ms a letter, line one
 const PAUSE = 450; // ms between the lines
