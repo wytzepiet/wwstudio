@@ -49,6 +49,10 @@ export default function Ticker(props: { labels: string[] }) {
 		const d = (i - p) / REACH;
 		return Math.exp(-d * d);
 	};
+	/** How long and bright a line is: the one you are at long and white, the others short and dim,
+	 *  each leaning toward the pointer. */
+	const line = (i: number) =>
+		i === at() ? { width: 24 + 10 * swell(i), height: 2, alpha: 1 } : { width: 8 + 22 * swell(i), height: 1, alpha: 0.3 + 0.5 * swell(i) };
 	/** The line nearest the pointer. */
 	const near = createMemo(() => (pointer() === null ? null : Math.round(Math.min(Math.max(pointer()!, 0), props.labels.length - 1))), {
 		name: 'tickerNear'
@@ -75,15 +79,15 @@ export default function Ticker(props: { labels: string[] }) {
 						<button
 							type="button"
 							// Each line sits in a taller target, so it is easy to hit.
-							class={[
-								'ticker-line relative block h-3 w-10 cursor-pointer focus-visible:outline focus-visible:outline-offset-2 focus-visible:outline-white/60',
-								{ at: i === at() }
-							]}
-							style={{ '--swell': swell(i) }}
+							class="relative block h-3 w-10 cursor-pointer focus-visible:outline focus-visible:outline-offset-2 focus-visible:outline-white/60"
 							aria-label={props.labels[i]}
 							aria-current={i === at() ? 'step' : undefined}
 							onClick={() => scrollTo({ top: stops()[i] ?? 0, behavior: 'smooth' })}
 						>
+							<span
+								class="absolute top-1/2 right-0 -translate-y-1/2 bg-white transition-[width,height,opacity] duration-250 ease-out-soft motion-reduce:transition-none"
+								style={{ width: `${line(i).width}px`, height: `${line(i).height}px`, opacity: line(i).alpha }}
+							/>
 							{/* What the nearest line is, beside it on the left, small, with a soft dark halo so it
 							    reads over the bright flock too. */}
 							<span

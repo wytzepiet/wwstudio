@@ -57,26 +57,44 @@ export default function Headline(props: { lines: [string, string] }) {
 	const shown = createMemo(() => Math.max(0, Math.min(typed().length, Math.floor(t() / TYPE_EVERY))));
 	const t2 = () => t() - secondStart();
 	const shuffle = () => Math.floor(t() / SHUFFLE_EVERY);
+	/** Is this letter of line two still being worked out? */
+	const working = (w: { appear: number; settle: number; blank: boolean }) => !done() && !w.blank && t2() >= w.appear && t2() < w.settle;
+	/** Until it has played, a letter shows only once it is on: so the finished headline never flashes
+	 *  up before it is played (it is rendered so on the server too). With reduced motion it simply
+	 *  stands there, from the first paint. */
+	const hidden = (on: boolean) => ({ 'motion-safe:opacity-0': !done() && !on });
 
 	return (
-		<h1 class={['headline m-0 text-[clamp(2.5rem,7vw,7rem)] leading-[0.95] font-extrabold tracking-[-0.04em]', { done: done() }]} aria-label={props.lines.join(' ')}>
+		<h1 class="m-0 text-[clamp(2.5rem,7vw,7rem)] leading-[0.95] font-extrabold tracking-[-0.04em]" aria-label={props.lines.join(' ')}>
 			<span class="relative block" aria-hidden="true">
 				<For each={typed()} keyed={false}>
-					{(ch, i) => <span class={['ch relative', { on: i < shown(), caret: !done() && i === shown() - 1 && shown() < typed().length }]}>{ch()}</span>}
+					{(ch, i) => (
+						<span class={['relative', hidden(i < shown())]}>
+							{ch()}
+							{/* The caret, after the letter last typed. */}
+							<Show when={!done() && i === shown() - 1 && shown() < typed().length}>
+								<span class="absolute top-[0.08em] -right-[0.12em] bottom-[0.04em] w-[0.06em] bg-current" />
+							</Show>
+						</span>
+					)}
 				</For>
 			</span>
 			<span class="relative block" aria-hidden="true">
 				<For each={worked()} keyed={false}>
-					{(w) => <span class={['ch relative', { on: t2() >= w().appear, 'text-transparent': !done() && !w().blank && t2() < w().settle }]}>{w().ch}</span>}
+					{(w) => <span class={['relative', hidden(t2() >= w().appear), { 'text-transparent': working(w()) }]}>{w().ch}</span>}
 				</For>
-				{/* The noise is drawn on a copy of the line laid over it, see-through as a whole, so
-				    where two glyphs overlap they don't add up. */}
+				{/* A letter still being worked out keeps its width, empty, and a random glyph shows in its
+				    place, on a copy of the line laid over it: see-through as a whole, so where two glyphs
+				    overlap they don't add up. */}
 				<Show when={!done()}>
-					<span class="noise pointer-events-none absolute inset-0">
+					<span class="pointer-events-none absolute inset-0">
 						<For each={worked()} keyed={false}>
 							{(w, i) => (
-								<span class="ch on relative text-transparent" data-glyph={t2() >= w().appear && !w().blank && t2() < w().settle ? GLYPHS[Math.floor(hash(i, shuffle()) * GLYPHS.length)] : undefined}>
+								<span class="relative text-transparent">
 									{w().ch}
+									<Show when={working(w())}>
+										<span class="absolute inset-0 text-center font-normal text-subtle">{GLYPHS[Math.floor(hash(i, shuffle()) * GLYPHS.length)]}</span>
+									</Show>
 								</span>
 							)}
 						</For>
