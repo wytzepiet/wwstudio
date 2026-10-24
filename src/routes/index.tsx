@@ -19,7 +19,7 @@ const lines = [
 	{ label: 'Hi', text: "Hi, I'm Wytze, a developer in Rotterdam." },
 	{ label: 'What I build', text: 'I build websites, apps, backends and interactive things like the one you just flew through.' },
 	{ label: 'Code got cheap', text: 'Code got cheap.' },
-	{ label: 'What I bring', text: "What I bring is the part that didn't: an eye for what's good, the judgement to choose, and the ability to express exactly what it should be." },
+	{ label: 'What I bring', text: "What didn't: telling good from bad, and how to put it into words." },
 	{ label: 'The work', text: 'Take a look at some of my work.' }
 ];
 // From the last stop the page scrolls as pages do: the work, whose first project already peeks in
