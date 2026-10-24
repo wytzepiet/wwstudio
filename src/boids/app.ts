@@ -170,7 +170,7 @@ export async function startBoids(
 	// ease rather than creeping in. About a second all told. Past it, the camera keeps up with the
 	// scroll closely.
 	const ACCEL = 2.5;
-	const BRAKE = 7;
+	const BRAKE = 4.5;
 	let travel = 0;
 	let travelSpeed = 0;
 
