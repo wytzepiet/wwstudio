@@ -140,7 +140,8 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
 		let a0 = 1.5707963 - s / sim.ringRadius - sim.ringAngle;
 		// The surges: waves running round it, shifting each boid along the ring toward the nearest
 		// crest (so they bunch there), and swelling the band where they are.
-		let wave = 3.0 * a0 - sim.surgePhase;
+		// Clockwise, as the ring fills and turns.
+		let wave = 3.0 * a0 + sim.surgePhase;
 		let surge = mix(0.3 + 0.7 * energy, 1.0, full);
 		// Drawing in, the knots are packed harder and the gaps between them run nearly empty, and they
 		// swell less, so even on a small ring they stay apart and the spin shows.
