@@ -144,10 +144,10 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
 		let wave = 3.0 * a0 + sim.surgePhase;
 		// In the last moment of drawing in, as the ring becomes the point, the knots dissolve, so the
 		// burst flies out evenly all round instead of in three streams.
-		let surge = mix(0.3 + 0.7 * energy, 1.0, full) * (1.0 - smoothstep(0.8, 1.0, sim.squeeze));
+		let surge = mix(0.3 + 0.7 * energy, 1.0, full) * (1.0 - smoothstep(0.7, 0.98, sim.squeeze));
 		// Drawing in, the knots are packed harder and the gaps between them run nearly empty, and they
 		// swell less, so even on a small ring they stay apart and the spin shows.
-		let pack = mix(0.11, 0.3, smoothstep(0.0, 0.3, sim.squeeze));
+		let pack = mix(0.11, 0.23, smoothstep(0.0, 0.3, sim.squeeze));
 		let a = a0 + pack * surge * sin(wave);
 		let swell = 1.0 + mix(0.6, 0.4, sim.squeeze) * surge * max(cos(wave), 0.0);
 		let b = rand.y * 6.2831853 + sim.time * (rand.w - 0.5) * 3.0;
@@ -180,8 +180,11 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
 	var kick = vec3f(0.0);
 	if (sim.burst > 0.0) {
 		let fromMiddle = p - sim.goal;
-		let jitter = f32(pcg(who ^ sim.frame) % 1024u) / 1024.0;
-		kick = fromMiddle / max(length(fromMiddle), 1e-3) * sim.burst * (0.6 + 0.8 * jitter);
+		// Thrown out unevenly, as an explosion throws its debris: most about as hard, some much harder
+		// (the cube lets a few fly far), each a little off straight out.
+		let r = vec3f(vec3u(pcg(who ^ sim.frame), pcg(who ^ sim.frame ^ 0x68e31da4u), pcg(who ^ sim.frame ^ 0xb5297a4du)) % vec3u(1024u)) / 1024.0;
+		let out = normalize(fromMiddle / max(length(fromMiddle), 1e-3) + (r - 0.5) * 0.6);
+		kick = out * sim.burst * (0.45 + 0.35 * r.x + 1.6 * r.y * r.y * r.y);
 	}
 
 	// The pointer, as on the old site: boids near the segment it swept this frame (on screen) get
