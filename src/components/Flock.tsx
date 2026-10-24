@@ -22,7 +22,9 @@ const RESUME_KEY = 'dev:scroll';
  */
 export default function Flock() {
 	const stage = useContext(Stage);
-	const [percent, setPercent] = createSignal('', { name: 'percent' });
+	// 0% from the first paint (it is rendered so on the server), while the engines start and the
+	// shaders are made; then the ring comes in round it.
+	const [percent, setPercent] = createSignal('0%', { name: 'percent' });
 	const [gone, setGone] = createSignal(false, { name: 'loaderGone' });
 	const [failed, setFailed] = createSignal(false, { name: 'noFlock' });
 	let canvas!: HTMLCanvasElement;
