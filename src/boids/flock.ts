@@ -155,6 +155,7 @@ export class Flock {
 		// How hard boids are drawn to their places: harder as the ring tenses, so they keep up.
 		F[68] = 6 / Math.max(f.ringScale, 0.08);
 		F[69] = f.pushDecay;
+		F[70] = 1 - f.ringScale;
 		this.device.queue.writeBuffer(this.simBuffer, 0, this.sim);
 	}
 

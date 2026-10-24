@@ -119,7 +119,8 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
 	// jostling in a loose band, and now and then a few let go, peel away and are pulled back; waves
 	// of birds surge round it, bunching into knots that swell outward; and it beats. All of it builds
 	// as the ring fills, and the moment it is full it holds still: the band drawn tight, the breath
-	// held, before the burst.
+	// held. Then, as it draws in to the point it bursts from (`squeeze`), the surges come back and
+	// whip round it, ever faster, until they blur.
 	let who = u32(me.vel.w);
 	var present = 1.0;
 	if (sim.hold > 0.0) {
@@ -139,10 +140,14 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
 		let a0 = 1.5707963 - s / sim.ringRadius - sim.ringAngle;
 		// The surges: waves running round it, shifting each boid along the ring toward the nearest
 		// crest (so they bunch there), and swelling the band where they are.
-		let wave = 3.0 * a0 - sim.time * (1.6 + 2.6 * sim.progress);
-		let surge = 0.3 + 0.7 * energy;
-		let a = a0 + 0.2 * surge * sin(wave) * (1.0 - full);
-		let swell = 1.0 + 1.2 * surge * max(cos(wave), 0.0) * (1.0 - full);
+		// Drawing in, they spin up: the phase runs ahead as the squeeze squared (itself eased in), so
+		// they start slow and end whipping round some four times a second, as fast as frames can
+		// still show without the knots strobing.
+		let squeeze = sim.squeeze;
+		let wave = 3.0 * a0 - sim.time * (1.6 + 2.6 * sim.progress) - 8.0 * squeeze * squeeze;
+		let surge = (0.3 + 0.7 * energy) * (1.0 - full) + smoothstep(0.0, 0.25, squeeze);
+		let a = a0 + 0.2 * surge * sin(wave);
+		let swell = 1.0 + 1.2 * surge * max(cos(wave), 0.0);
 		let b = rand.y * 6.2831853 + sim.time * (rand.w - 0.5) * 3.0;
 		let tube = width * swell * sqrt(rand.z);
 		let around = vec3f(cos(a), sin(a), 0.0);
