@@ -1,0 +1,51 @@
+/* On the right edge, in the middle, over everything; in once the loader has let go. */
+.ticker {
+	position: fixed;
+	z-index: 4;
+	right: clamp(12px, 2vw, 28px);
+	top: 50%;
+	translate: 0 -50%;
+	display: grid;
+	justify-items: end;
+	opacity: 0;
+	transition: opacity 0.8s;
+	pointer-events: none;
+}
+.ticker.on {
+	opacity: 1;
+	pointer-events: auto;
+}
+/* Each line sits in a taller target, so it is easy to hit. */
+.ticker button {
+	display: block;
+	width: 28px;
+	height: 12px;
+	padding: 0;
+	border: 0;
+	background: none;
+	cursor: pointer;
+}
+.ticker button::after {
+	content: '';
+	display: block;
+	width: 8px;
+	height: 1px;
+	margin-left: auto;
+	background: rgb(255 255 255 / 0.3);
+	transition:
+		width 0.5s cubic-bezier(0.2, 0.8, 0.2, 1),
+		background-color 0.5s;
+}
+.ticker button:hover::after {
+	width: 14px;
+	background: rgb(255 255 255 / 0.6);
+}
+.ticker button.at::after {
+	width: 24px;
+	height: 2px;
+	background: #fff;
+}
+.ticker button:focus-visible {
+	outline: 1px solid rgb(255 255 255 / 0.6);
+	outline-offset: 2px;
+}

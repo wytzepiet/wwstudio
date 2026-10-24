@@ -5,7 +5,8 @@ import Ending from '../components/Ending';
 import Flock from '../components/Flock';
 import Headline from '../components/Headline';
 import Reveal from '../components/Reveal';
-import Work, { TOP } from '../components/Work';
+import Ticker from '../components/Ticker';
+import Work, { TOP, work } from '../components/Work';
 import { createPlane } from '../plane';
 import { createStage, Stage } from '../stage';
 import './home.css';
@@ -61,6 +62,8 @@ export default function Home() {
 				</div>
 				<Work />
 				<Ending />
+				{/* The hero, the intro's lines, the projects, "Still here?" and the lake. */}
+				<Ticker count={1 + stops.length + work.length + 2} />
 			</div>
 		</Stage>
 	);

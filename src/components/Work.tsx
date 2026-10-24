@@ -9,7 +9,7 @@ import './Work.css';
 /** The panels stack: each holds still TOP of a screen from the top while the next slides over it. */
 export const TOP = 0.09;
 
-const work = [
+export const work = [
 	{
 		name: 'Sprawl',
 		image: sprawl,
