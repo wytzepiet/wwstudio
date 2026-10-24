@@ -169,9 +169,9 @@ export async function startBoids(
 	// near the end it may go no faster than LAND × (how far is left)^0.6, so it slows as it arrives,
 	// the braking itself easing off to nothing: a soft landing, without a constant brake's sudden stop
 	// or a spring's long creep. About a second all told. Past it, the camera keeps up with the scroll
-	// closely.
-	const ACCEL = 2.5;
-	const LAND = 2.2;
+	// closely. Back the other way it is the reverse: it sets off at once and lands slowly.
+	const ACCEL = { in: 1.6, back: 14 };
+	const LAND = { in: 2.2, back: 1.5 };
 	let travel = 0;
 	let travelSpeed = 0;
 
@@ -243,7 +243,8 @@ export async function startBoids(
 			const gap = travelTo - travel;
 			const dir = Math.sign(gap);
 			// Its speed toward where it is going (below 0 while it still moves the other way).
-			const toward = Math.min(travelSpeed * dir + ACCEL * dt, LAND * Math.abs(gap) ** 0.6);
+			const way = dir < 0 ? 'back' : 'in';
+			const toward = Math.min(travelSpeed * dir + ACCEL[way] * dt, LAND[way] * Math.abs(gap) ** 0.6);
 			travelSpeed = toward * dir;
 			const step = travelSpeed * dt;
 			// Arriving, it stops there rather than pass it.
