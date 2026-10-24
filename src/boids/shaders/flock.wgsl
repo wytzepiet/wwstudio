@@ -130,7 +130,7 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
 		let energy = smoothstep(0.0, 0.85, sim.progress) * (1.0 - full);
 		let beat = pow(max(sin(sim.time * 2.4 + sim.progress * 20.0), 0.0), 10.0) * energy;
 		let radius = sim.ringRadius * (1.0 + 0.05 * beat);
-		let thick = sim.ringRadius * 0.07 * (1.0 + 1.2 * energy);
+		let thick = sim.ringRadius * 0.07 * (1.0 + 1.2 * energy) * (1.0 - 0.5 * sim.squeeze);
 		let cap = thick * (1.0 - smoothstep(0.95, 1.0, sim.progress));
 		let arc = sim.progress * 6.2831853 * sim.ringRadius;
 		let s = rand.x * 6.2831853 * sim.ringRadius; // its place along the whole ring
@@ -142,8 +142,11 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
 		// crest (so they bunch there), and swelling the band where they are.
 		let wave = 3.0 * a0 - sim.surgePhase;
 		let surge = mix(0.3 + 0.7 * energy, 1.0, full);
-		let a = a0 + 0.2 * surge * sin(wave);
-		let swell = 1.0 + 1.2 * surge * max(cos(wave), 0.0);
+		// Drawing in, the knots are packed harder and the gaps between them run nearly empty, and they
+		// swell less, so even on a small ring they stay apart and the spin shows.
+		let pack = mix(0.2, 0.31, smoothstep(0.0, 0.3, sim.squeeze));
+		let a = a0 + pack * surge * sin(wave);
+		let swell = 1.0 + mix(1.2, 0.4, sim.squeeze) * surge * max(cos(wave), 0.0);
 		let b = rand.y * 6.2831853 + sim.time * (rand.w - 0.5) * 3.0;
 		let tube = width * swell * sqrt(rand.z);
 		let around = vec3f(cos(a), sin(a), 0.0);
