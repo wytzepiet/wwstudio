@@ -142,7 +142,9 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
 		// crest (so they bunch there), and swelling the band where they are.
 		// Clockwise, as the ring fills and turns.
 		let wave = 3.0 * a0 + sim.surgePhase;
-		let surge = mix(0.3 + 0.7 * energy, 1.0, full);
+		// In the last moment of drawing in, as the ring becomes the point, the knots dissolve, so the
+		// burst flies out evenly all round instead of in three streams.
+		let surge = mix(0.3 + 0.7 * energy, 1.0, full) * (1.0 - smoothstep(0.9, 1.0, sim.squeeze));
 		// Drawing in, the knots are packed harder and the gaps between them run nearly empty, and they
 		// swell less, so even on a small ring they stay apart and the spin shows.
 		let pack = mix(0.11, 0.31, smoothstep(0.0, 0.3, sim.squeeze));
