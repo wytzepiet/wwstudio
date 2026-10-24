@@ -183,8 +183,8 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
 		// Thrown out unevenly, as an explosion throws its debris: most about as hard, some much harder
 		// (the cube lets a few fly far), each a little off straight out.
 		let r = vec3f(vec3u(pcg(who ^ sim.frame), pcg(who ^ sim.frame ^ 0x68e31da4u), pcg(who ^ sim.frame ^ 0xb5297a4du)) % vec3u(1024u)) / 1024.0;
-		let out = normalize(fromMiddle / max(length(fromMiddle), 1e-3) + (r - 0.5) * 0.6);
-		kick = out * sim.burst * (0.45 + 0.35 * r.x + 1.6 * r.y * r.y * r.y);
+		let out = normalize(fromMiddle / max(length(fromMiddle), 1e-3) + (r - 0.5) * 0.45);
+		kick = out * sim.burst * (0.65 + 0.35 * r.x + 1.2 * r.y * r.y * r.y);
 	}
 
 	// The pointer, as on the old site: boids near the segment it swept this frame (on screen) get
