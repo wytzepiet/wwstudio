@@ -200,7 +200,7 @@ export async function startBoids(
 			// Up to about 60 radians a second at the end: faster, and with three of them the knots
 			// would jump further than a third of their spacing a frame and seem to stand or reverse.
 			const squeeze = tensing !== null ? Math.min((now - tensing) / TENSE, 1) : 0;
-			const speed = tensing !== null ? 9 + 51 * squeeze * squeeze : 1.6 + 7.4 * progress * progress;
+			const speed = tensing !== null ? 14 + 46 * Math.sqrt(squeeze) : 2.5 + 11.5 * progress;
 			if (hold > 0) surgePhase += speed * dt;
 		}
 		if (tensing !== null) {
