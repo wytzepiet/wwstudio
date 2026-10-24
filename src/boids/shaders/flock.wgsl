@@ -130,7 +130,7 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
 		let energy = smoothstep(0.0, 0.85, sim.progress) * (1.0 - full);
 		let beat = pow(max(sin(sim.time * 2.4 + sim.progress * 20.0), 0.0), 10.0) * energy;
 		let radius = sim.ringRadius * (1.0 + 0.05 * beat);
-		let thick = sim.ringRadius * 0.07 * (1.0 + 0.6 * energy) * (1.0 - 0.5 * sim.squeeze);
+		let thick = sim.ringRadius * 0.07 * (1.0 + 0.9 * energy) * (1.0 - 0.5 * sim.squeeze);
 		let cap = thick * (1.0 - smoothstep(0.95, 1.0, sim.progress));
 		let arc = sim.progress * 6.2831853 * sim.ringRadius;
 		let s = rand.x * 6.2831853 * sim.ringRadius; // its place along the whole ring
@@ -147,9 +147,9 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
 		let surge = mix(0.3 + 0.7 * energy, 1.0, full) * (1.0 - smoothstep(0.9, 1.0, sim.squeeze));
 		// Drawing in, the knots are packed harder and the gaps between them run nearly empty, and they
 		// swell less, so even on a small ring they stay apart and the spin shows.
-		let pack = mix(0.11, 0.31, smoothstep(0.0, 0.3, sim.squeeze));
+		let pack = mix(0.15, 0.31, smoothstep(0.0, 0.3, sim.squeeze));
 		let a = a0 + pack * surge * sin(wave);
-		let swell = 1.0 + mix(0.6, 0.4, sim.squeeze) * surge * max(cos(wave), 0.0);
+		let swell = 1.0 + mix(0.9, 0.4, sim.squeeze) * surge * max(cos(wave), 0.0);
 		let b = rand.y * 6.2831853 + sim.time * (rand.w - 0.5) * 3.0;
 		let tube = width * swell * sqrt(rand.z);
 		let around = vec3f(cos(a), sin(a), 0.0);
@@ -170,7 +170,7 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
 		// How hard it is held: less the more restless it is, firmly when full. A few at a time let go
 		// for a moment (each now and then, at its own time) and drift off with the flock.
 		let loose = smoothstep(0.9, 1.0, fract(rand.w * 13.0 + sim.time * 0.25)) * energy;
-		let grip = mix(1.0, 0.7, energy) * (1.0 - 0.6 * loose);
+		let grip = mix(1.0, 0.58, energy) * (1.0 - 0.75 * loose);
 		vel = mix(vel, (place - p) * sim.ringPull + orbit, sim.hold * grip);
 	}
 	// Fades in and out over about a fifth of a second.
