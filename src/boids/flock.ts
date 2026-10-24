@@ -25,6 +25,8 @@ export interface Frame {
 	ringScale: number;
 	/** Where the surges running round the ring are, in radians of their wave. */
 	surgePhase: number;
+	/** How far the ring has drawn in (0 to 1); 1 also while it lets go after the burst. */
+	squeeze: number;
 	/** How fast the push dies away, per second: faster just after a burst. */
 	pushDecay: number;
 	viewProj: Float32Array;
@@ -157,7 +159,7 @@ export class Flock {
 		// How hard boids are drawn to their places: harder as the ring tenses, so they keep up.
 		F[68] = 6 / Math.max(f.ringScale, 0.08);
 		F[69] = f.pushDecay;
-		F[70] = 1 - f.ringScale;
+		F[70] = f.squeeze;
 		F[71] = f.surgePhase;
 		this.device.queue.writeBuffer(this.simBuffer, 0, this.sim);
 	}

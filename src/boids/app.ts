@@ -297,6 +297,9 @@ export async function startBoids(
 			ringAngle,
 			ringScale,
 			surgePhase,
+			// After the burst the hold fades out over a moment, still pulling a little toward the ring:
+			// with no knots on it then (as when drawn in), so the burst flies out evenly all round.
+			squeeze: burstAt !== null && hold > 0 ? 1 : 1 - ringScale,
 			pushDecay: burstAt !== null && now - burstAt < BLAST ? BLAST_DECAY : 4.35,
 			viewProj,
 			camRight,
