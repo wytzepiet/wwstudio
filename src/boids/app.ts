@@ -150,6 +150,9 @@ export async function startBoids(
 	const COLLAPSED = 150; // ms held at the point, so every boid gets there before the burst
 	let tensing: number | null = null;
 	let ringScale = 1;
+	// Where the surges running round the ring are (radians of their wave): it runs ahead ever faster
+	// as the ring fills and then draws in, so they end up racing round it.
+	let surgePhase = 0;
 	// The burst spreads the boids thin: too thin to glow by their crowding (see glowFrom), and over so
 	// much more of the screen that the light, which adds up, thins out too. So for a while everyone
 	// glows regardless, and brighter (AFTERGLOW_GAIN ×): fully for GLOW_HOLD ms, then fading back
@@ -192,6 +195,13 @@ export async function startBoids(
 			const k = Math.min(Math.max((now - burstAt - GLOW_HOLD) / GLOW_FADE, 0), 1);
 			afterglow = 1 - k * k * (3 - 2 * k);
 			if (k >= 1) burstAt = null;
+		}
+		{
+			// Up to about 60 radians a second at the end: faster, and with three of them the knots
+			// would jump further than a third of their spacing a frame and seem to stand or reverse.
+			const squeeze = tensing !== null ? Math.min((now - tensing) / TENSE, 1) : 0;
+			const speed = tensing !== null ? 9 + 51 * squeeze * squeeze : 1.6 + 7.4 * progress * progress;
+			if (hold > 0) surgePhase += speed * dt;
 		}
 		if (tensing !== null) {
 			const k = Math.min((now - tensing) / TENSE, 1);
@@ -283,6 +293,7 @@ export async function startBoids(
 			progress,
 			ringAngle,
 			ringScale,
+			surgePhase,
 			pushDecay: burstAt !== null && now - burstAt < BLAST ? BLAST_DECAY : 4.35,
 			viewProj,
 			camRight,

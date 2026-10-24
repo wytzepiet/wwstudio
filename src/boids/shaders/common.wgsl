@@ -21,7 +21,7 @@ struct Sim {
 	wCoh: f32, wBounds: f32, wMouse: f32, hold: f32,
 	wWander: f32, wanderScale: f32, wanderSpeed: f32, burst: f32,
 	ringRadius: f32, ringSpin: f32, progress: f32, ringAngle: f32, // the loader
-	ringPull: f32, pushDecay: f32, squeeze: f32, _c: f32, // squeeze: how far the ring has drawn in, 0 to 1
+	ringPull: f32, pushDecay: f32, squeeze: f32, surgePhase: f32, // squeeze: how far the ring has drawn in, 0 to 1
 }
 
 @group(0) @binding(0) var<uniform> sim: Sim;

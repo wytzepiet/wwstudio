@@ -23,6 +23,8 @@ export interface Frame {
 	ringAngle: number;
 	/** × ringRadius: below 1 while the ring tenses before it bursts. */
 	ringScale: number;
+	/** Where the surges running round the ring are, in radians of their wave. */
+	surgePhase: number;
 	/** How fast the push dies away, per second: faster just after a burst. */
 	pushDecay: number;
 	viewProj: Float32Array;
@@ -156,6 +158,7 @@ export class Flock {
 		F[68] = 6 / Math.max(f.ringScale, 0.08);
 		F[69] = f.pushDecay;
 		F[70] = 1 - f.ringScale;
+		F[71] = f.surgePhase;
 		this.device.queue.writeBuffer(this.simBuffer, 0, this.sim);
 	}
 
