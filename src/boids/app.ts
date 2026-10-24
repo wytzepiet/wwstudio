@@ -170,7 +170,7 @@ export async function startBoids(
 	// the braking itself easing off to nothing: a soft landing, without a constant brake's sudden stop
 	// or a spring's long creep. About a second all told. Past it, the camera keeps up with the scroll
 	// closely. Back the other way it is the reverse: it sets off at once and lands slowly.
-	const ACCEL = { in: 1.6, back: 14 };
+	const ACCEL = { in: 1.1, back: 14 };
 	const LAND = { in: 2.2, back: 1.5 };
 	let travel = 0;
 	let travelSpeed = 0;
