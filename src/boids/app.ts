@@ -214,6 +214,18 @@ export async function startBoids(
 		vec3.lerp(goal, goalTo, params.goalGlide > 0 ? 1 - Math.exp(-simDt / params.goalGlide) : 1, goal);
 
 		const aspect = canvas.width / canvas.height;
+		// The flight goes on even while the flock is set into a scene, so the page's planes, which
+		// are placed by it, are where they should be however the page got there.
+		if (Math.max(travel, travelTo) <= 1.001) {
+			travelSpeed += (FOLLOW * FOLLOW * (travelTo - travel) - 2 * FOLLOW * travelSpeed) * dt;
+			travel += travelSpeed * dt;
+		} else {
+			const was = travel;
+			travel += (travelTo - travel) * (1 - Math.exp(-dt * 12));
+			travelSpeed = dt > 0 ? (travel - was) / dt : 0;
+		}
+		const traveled = travel * (params.distance + PAST);
+		onFlown?.(traveled);
 		let camPos, viewMat, fov, flown;
 		if (placed) {
 			// The scene's camera, in the flock's own units.
@@ -234,17 +246,8 @@ export async function startBoids(
 				params.distance * Math.cos(yaw) * Math.cos(pitch)
 			);
 			// Looking at the flock's middle, and flying that way as `travel` goes to 1.
-			if (Math.max(travel, travelTo) <= 1.001) {
-				travelSpeed += (FOLLOW * FOLLOW * (travelTo - travel) - 2 * FOLLOW * travelSpeed) * dt;
-				travel += travelSpeed * dt;
-			} else {
-				const was = travel;
-				travel += (travelTo - travel) * (1 - Math.exp(-dt * 12));
-				travelSpeed = dt > 0 ? (travel - was) / dt : 0;
-			}
 			const ahead = vec3.normalize(vec3.negate(orbit));
-			flown = travel * (params.distance + PAST);
-			onFlown?.(flown);
+			flown = traveled;
 			camPos = vec3.addScaled(orbit, ahead, flown);
 			viewMat = mat4.lookAt(camPos, vec3.add(camPos, ahead), [0, 1, 0]);
 			fov = FOV;

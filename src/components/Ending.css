@@ -1,0 +1,122 @@
+/* Behind the flock, and only there once it is in the scene. */
+.dusk {
+	position: fixed;
+	inset: 0;
+	z-index: 0;
+	display: block;
+	width: 100%;
+	height: 100%;
+	visibility: hidden;
+	pointer-events: none;
+}
+.dusk.on {
+	visibility: visible;
+}
+/* The frame's edge, as the work panels have it. */
+.frame {
+	position: fixed;
+	z-index: 2;
+	border-radius: 28px;
+	box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.08);
+	pointer-events: none;
+	visibility: hidden;
+}
+.frame.on {
+	visibility: visible;
+}
+/* Small, in the bottom corner, in the site's grey; it settles in four seconds after the email. */
+.whatsapp {
+	position: absolute;
+	right: 26px;
+	bottom: 22px;
+	font-size: 0.8125rem;
+	color: var(--subtle, #8a93a8);
+	text-decoration: none;
+	pointer-events: auto;
+	opacity: 0;
+	translate: 0 6px;
+	visibility: hidden;
+	transition:
+		opacity 1.2s,
+		translate 1.2s cubic-bezier(0.2, 0.8, 0.2, 1),
+		color 0.2s,
+		visibility 0s 1.2s;
+}
+.whatsapp.on {
+	opacity: 1;
+	translate: 0 0;
+	visibility: visible;
+	transition:
+		opacity 1.2s 4s,
+		translate 1.2s cubic-bezier(0.2, 0.8, 0.2, 1) 4s,
+		color 0.2s,
+		visibility 0s 4s;
+}
+.whatsapp:hover,
+.whatsapp:focus-visible {
+	color: #fff;
+}
+.boring,
+.lake {
+	position: relative;
+	z-index: 3;
+	height: 100vh;
+	display: grid;
+	place-items: center;
+	padding: clamp(16px, 5vw, 64px);
+	box-sizing: border-box;
+	scroll-snap-align: start;
+	scroll-snap-stop: always;
+	/* They lie over the scene and its frame: only what is in them takes the pointer. */
+	pointer-events: none;
+}
+.boring > *,
+.lake .email {
+	pointer-events: auto;
+}
+.boring p,
+.hi {
+	margin: 0;
+	white-space: pre-line;
+	text-align: center;
+	text-wrap: balance;
+	font-size: clamp(2rem, 4.5vw, 3.5rem);
+	font-weight: 700;
+	line-height: 1.08;
+	letter-spacing: -0.03em;
+}
+.descent {
+	pointer-events: none;
+}
+/* Without the scene, it stands over the link; with it, in the middle of the screen. */
+.lake {
+	align-content: center;
+	gap: 2rem;
+}
+.ending.scened .hi {
+	position: fixed;
+	inset: 50% 0 auto;
+	translate: 0 -50%;
+	padding: 0 clamp(16px, 5vw, 64px);
+	pointer-events: none;
+}
+/* Without the scene, an ordinary link. */
+.email {
+	font-size: clamp(1.5rem, 4vw, 3rem);
+	font-weight: 600;
+	color: #fff;
+	text-decoration: none;
+}
+/* With it, the scene draws the email and the link lies over it, unseen. */
+.ending.scened .email {
+	position: fixed;
+	z-index: 3;
+	color: transparent;
+	overflow: hidden;
+	white-space: nowrap;
+	visibility: hidden;
+}
+.ending.scened .email:focus-visible {
+	outline: 1px solid rgb(255 255 255 / 0.6);
+	outline-offset: 4px;
+}

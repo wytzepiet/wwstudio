@@ -1,0 +1,44 @@
+/* Above the planes behind the flock, under those in front of it, and never in the pointer's way.
+   (Not below zero: the page's body would then stand in front of whatever lies behind it.) */
+.flock {
+	position: fixed;
+	inset: 0;
+	z-index: 1;
+	display: block;
+	width: 100%;
+	height: 100%;
+	pointer-events: none;
+}
+.flock.off {
+	display: none;
+}
+/* In the middle of the ring, which is in the middle of the screen. */
+.percent {
+	position: fixed;
+	inset: 0;
+	margin: 0;
+	display: grid;
+	place-items: center;
+	pointer-events: none;
+	font: 500 0.875rem / 1 ui-monospace, 'SF Mono', Menlo, monospace;
+	letter-spacing: 0.08em;
+	color: rgb(255 255 255 / 0.8);
+	font-variant-numeric: tabular-nums;
+	transition: opacity 0.4s;
+}
+.percent.gone {
+	opacity: 0;
+}
+/* The page's planes, seen through the flock's camera (see plane.ts). Each fills the screen and
+   carries its own perspective, so planes behind the flock can lie under the canvas and those in
+   front over it. Scrolling is only the camera's motion. */
+.plane {
+	position: fixed;
+	inset: 0;
+	will-change: transform, opacity;
+	/* Each fills the screen, so they let the pointer through; only their content takes it. */
+	pointer-events: none;
+}
+.plane > * {
+	pointer-events: auto;
+}

@@ -3,21 +3,31 @@
 	"type": "module",
 	"version": "0.0.1",
 	"scripts": {
-		"dev": "astro dev",
-		"build": "astro check && astro build",
-		"preview": "astro preview",
-		"astro": "astro"
+		"dev": "vite",
+		"build": "vite build",
+		"serve": "vite preview",
+		"check": "tsc --noEmit",
+		"lint": "oxlint src"
 	},
 	"dependencies": {
-		"@astrojs/sitemap": "^3.7.4",
 		"@babylonjs/lite": "1.36.0",
-		"astro": "^7.4.2",
+		"@solidjs/meta": "^1.0.0-next.2",
+		"@solidjs/router": "^2.0.0-next.41",
+		"@solidjs/web": "^2.0.0-rc.17",
+		"solid-js": "^2.0.0-rc.17",
 		"wgpu-matrix": "^3.4.2"
 	},
 	"devDependencies": {
-		"@astrojs/check": "^0.9.12",
+		"@solidjs/diagnostics": "^2.0.0-rc.17",
+		"@solidjs/prerender": "^0.3.0",
+		"@solidjs/vite-plugin": "^3.0.0-next.51",
 		"@webgpu/types": "^0.1.74",
-		"sharp": "^0.34.4",
-		"typescript": "^6.0.3"
+		"eslint-plugin-solid": "~0.18.1",
+		"filesystem-routing": "0.4.0",
+		"oxlint": "~1.79.0",
+		"prerender-crawler": "^0.3.0",
+		"typescript": "^6.0.3",
+		"vite": "^8.1.5",
+		"vite-imagetools": "^12.0.1"
 	}
 }

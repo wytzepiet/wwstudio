@@ -1,0 +1,12 @@
+/* What every page shares. No font of our own: everyone reads the site in their system's (SF Pro on
+   Apple, Segoe UI on Windows, Roboto on Android). Nothing to download, native everywhere. */
+html,
+body {
+	margin: 0;
+	min-height: 100%;
+	color: #fff;
+	background: #00020f;
+	font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+	/* All secondary text: a grey with a little blue in it. */
+	--subtle: #8a93a8;
+}

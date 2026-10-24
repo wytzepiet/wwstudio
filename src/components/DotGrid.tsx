@@ -1,27 +1,24 @@
----
-// The dot grid of Fuse's own site (solid-fuse/packages/docs/components/home/dot-grid.tsx), without
-// React: a canvas of small dots filling its parent, bigger and brighter in a swirl round a glow.
-interface Props {
+import { onSettled } from 'solid-js';
+import './DotGrid.css';
+
+/**
+ * The dot grid of Fuse's own site (solid-fuse/packages/docs/components/home/dot-grid.tsx): a canvas
+ * of small dots filling its parent, bigger and brighter in a swirl round a glow. `glow`: where it
+ * is (0 to 1 of the width and height), how far it reaches (of the longer side), how strong.
+ */
+export default function DotGrid(props: {
 	color?: string;
 	spacing?: number;
-	/** Where the glow is (0 to 1 of the width and height), how far it reaches (of the longer side), how strong. */
 	glow?: { x: number; y: number; radius: number; intensity: number };
-}
-const { color = 'rgba(212, 147, 89, 0.18)', spacing = 14, glow } = Astro.props;
----
-
-<canvas class="dot-grid" data-color={color} data-spacing={spacing} data-glow={glow ? JSON.stringify(glow) : undefined}
-></canvas>
-
-<script>
-	for (const canvas of document.querySelectorAll<HTMLCanvasElement>('canvas.dot-grid')) {
+}) {
+	let canvas!: HTMLCanvasElement;
+	onSettled(() => {
 		const parent = canvas.parentElement!;
-		const spacing = Number(canvas.dataset.spacing);
-		const glow = canvas.dataset.glow ? JSON.parse(canvas.dataset.glow) : null;
-
+		const spacing = props.spacing ?? 14;
+		const glow = props.glow;
 		// The colour's parts, read once by painting it.
 		const probe = document.createElement('canvas').getContext('2d')!;
-		probe.fillStyle = canvas.dataset.color!;
+		probe.fillStyle = props.color ?? 'rgba(212, 147, 89, 0.18)';
 		probe.fillRect(0, 0, 1, 1);
 		const [r, g, b, a] = probe.getImageData(0, 0, 1, 1).data;
 
@@ -36,7 +33,6 @@ const { color = 'rgba(212, 147, 89, 0.18)', spacing = 14, glow } = Astro.props;
 			canvas.height = h * dpr;
 			const ctx = canvas.getContext('2d')!;
 			ctx.scale(dpr, dpr);
-
 			const cx = glow ? glow.x * w : 0;
 			const cy = glow ? glow.y * h : 0;
 			const reach = glow ? glow.radius * Math.max(w, h) : 0;
@@ -64,16 +60,9 @@ const { color = 'rgba(212, 147, 89, 0.18)', spacing = 14, glow } = Astro.props;
 			}
 		};
 		draw();
-		new ResizeObserver(() => requestAnimationFrame(draw)).observe(parent);
-	}
-</script>
-
-<style>
-	.dot-grid {
-		position: absolute;
-		inset: 0;
-		width: 100%;
-		height: 100%;
-		pointer-events: none;
-	}
-</style>
+		const observer = new ResizeObserver(() => requestAnimationFrame(draw));
+		observer.observe(parent);
+		return () => observer.disconnect();
+	});
+	return <canvas class="dot-grid" ref={canvas} />;
+}
