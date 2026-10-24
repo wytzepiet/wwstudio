@@ -6,6 +6,9 @@ import { Stage } from '../stage';
 const FILL = 2600; // ms for the ring to fill, if the page is ready by then
 const WAIT = 0.9; // where it waits until the page is
 const BEAT = 350; // ms full before it bursts
+/** The fill starts once SMOOTH_RUN frames in a row have come within SMOOTH_FRAME ms. */
+const SMOOTH_FRAME = 50;
+const SMOOTH_RUN = 4;
 /** While developing, every edit reloads the page: it then skips the loader and goes back to where
  *  it was, rather than starting over at the hero. (Not on the real site.) */
 const RESUME_KEY = 'dev:scroll';
@@ -70,14 +73,21 @@ export default function Flock() {
 			if (resuming) return release();
 
 			// The loader. The fake part: an eased curve over FILL. The true part: it holds at WAIT
-			// until the page is ready.
+			// until the page is ready. The curve only starts once frames come smoothly, so the GPU
+			// is really drawing: the first frames wait on its shaders being made, which on a first
+			// visit can take a while, and the ring would otherwise appear already nearly full.
 			let ready = false;
 			Promise.all([loaded, document.fonts.ready]).then(() => (ready = true));
-			const start = performance.now();
+			let start: number | null = null;
+			let smooth = 0;
+			let last = performance.now();
 			let full: number | null = null;
 			flock.progress(0);
 			const tick = (now: number) => {
-				const t = Math.min((now - start) / FILL, 1);
+				smooth = now - last < SMOOTH_FRAME ? smooth + 1 : 0;
+				last = now;
+				if (start === null && smooth >= SMOOTH_RUN) start = now;
+				const t = start === null ? 0 : Math.min((now - start) / FILL, 1);
 				const p = Math.min(1 - (1 - t) ** 3, ready ? 1 : WAIT);
 				flock.progress(p);
 				setPercent(`${Math.floor(p * 100)}%`);
