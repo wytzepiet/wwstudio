@@ -17,7 +17,8 @@ struct View {
 	farColor: vec4f,
 	streak: f32, glowFrom: f32, maxSpeed: f32, depthNear: f32,
 	depthFar: f32, glowRange: f32, depthSharpness: f32, minGlow: f32,
-	falloff: f32, _a: f32, _b: f32, _c: f32,
+	falloff: f32, mirrorY: f32, mirror: f32, count: f32,
+	pushStretch: f32, _a: f32, _b: f32, _c: f32,
 }
 
 @group(0) @binding(0) var<uniform> view: View;
@@ -56,9 +57,17 @@ fn vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> Out {
 		vec2f(-1.0, 1.0), vec2f(1.0, -1.0), vec2f(1.0, 1.0),
 	);
 	let q = corners[vi];
-	let b = boids[ii];
-	let p = b.pos.xyz;
-	let v = b.vel.xyz + b.push.xyz;
+	// Instances past the flock are its mirror image in the water: flipped about it, and dimmer.
+	let mirrored = f32(ii) >= view.count;
+	let b = boids[select(ii, ii - u32(view.count), mirrored)];
+	var p = b.pos.xyz;
+	// The pointer's push stretches a boid too, as far as pushStretch says: a flung spark streaks,
+	// but ink would only smear darker.
+	var v = b.vel.xyz + b.push.xyz * view.pushStretch;
+	if (mirrored) {
+		p.y = 2.0 * view.mirrorY - p.y;
+		v.y = -v.y;
+	}
 
 	let toBoid = p - view.camPos;
 	let dist = length(toBoid);
@@ -83,7 +92,7 @@ fn vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> Out {
 	out.uv = q;
 	// Boids right by the camera fade out, instead of filling the screen as they fly past it.
 	let close = smoothstep(15.0, 120.0, dist);
-	out.color = hslToRgb(hsl) * intensity * glow * close;
+	out.color = hslToRgb(hsl) * intensity * glow * close * select(1.0, view.mirror, mirrored);
 	return out;
 }
 

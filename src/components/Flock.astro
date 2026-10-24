@@ -13,6 +13,10 @@
 // `data-flight-end` screens down (on <body>): there the camera stops, and a plane marked
 // `data-recede` (in screens) zooms out a little and fades over that much more scrolling, as the
 // page slides over it.
+//
+// If the page has the dusk scene (<Ending>), it is made during the loader, paused, and the flock
+// runs on its GPU device, so it can fly into that scene at the end and be mirrored in its lake.
+// Once running, it says `flock:ready` on the window, with the flock, its params and the scene.
 ---
 
 <canvas class="flock" aria-hidden="true"></canvas>
@@ -20,6 +24,7 @@
 
 <script>
 	import { startBoids } from '../boids/app';
+	import { reveal } from '../reveal';
 	import { defaults, FLY, PAST, STEP } from '../boids/params';
 
 	const FILL = 2600; // ms for the ring to fill, if the page is ready by then
@@ -31,10 +36,17 @@
 	const percent = document.querySelector<HTMLElement>('.percent')!;
 	const html = document.documentElement;
 	html.classList.add('loading');
+	// While developing, every edit reloads the page: it then skips the loader and goes back to
+	// where it was, rather than starting over at the hero. (Not on the real site.)
+	const RESUME_KEY = 'dev:scroll';
+	const resume = import.meta.env.DEV ? Number(sessionStorage.getItem(RESUME_KEY) ?? NaN) : NaN;
+	const resuming = Number.isFinite(resume);
 	const released = () => {
-		scrollTo({ top: 0, behavior: 'instant' }); // whatever a reload tried, it starts at the hero
+		// Whatever a reload tried, it starts at the hero (or, developing, where it was).
+		scrollTo({ top: resuming ? resume : 0, behavior: 'instant' });
 		html.classList.remove('loading');
 		window.dispatchEvent(new Event('flock:released'));
+		if (import.meta.env.DEV) addEventListener('scroll', () => sessionStorage.setItem(RESUME_KEY, String(scrollY)), { passive: true });
 	};
 	const loaded = new Promise((done) => (document.readyState === 'complete' ? done(null) : addEventListener('load', done)));
 	// Screens scrolled to travel (1 = through the flock): FLY screens to get through, then STEP a screen.
@@ -70,13 +82,36 @@
 			plane.style.visibility = seen > 0.001 ? 'visible' : 'hidden';
 			// Only what you are reading can be clicked or selected, not the faint ones about it.
 			plane.inert = seen < 0.5;
+			// Its title (see src/reveal.ts) comes in as it arrives, and goes again once it has gone.
+			const title = plane.querySelector('.reveal');
+			if (title && (seen > 0.6 || seen < 0.05)) reveal(title, seen > 0.6);
 		}
 	};
 	place(0);
 	const fly = () => place(travel() * (D + PAST));
 
-	startBoids(canvas, { ...defaults }, { held: true, onFlown: place })
-		.then((flock) => {
+	// The dusk scene, if there is one; without it (or WebGPU) the flock runs on its own.
+	const duskCanvas = document.querySelector<HTMLCanvasElement>('canvas.dusk');
+	const dusk = duskCanvas
+		? import('../dusk/scene').then(({ startDusk }) => startDusk(duskCanvas, { sun: { azimuth: 18, elevation: -1.2 }, exposure: 0, stars: 0, email: duskCanvas.dataset.email! }, { paused: true })).catch((e) => (console.error(e), null))
+		: Promise.resolve(null);
+	const params = { ...defaults };
+
+	dusk
+		.then((scene) => startBoids(canvas, params, { held: !resuming, onFlown: place, device: scene?.device, onReflection: scene?.reflect }).then((flock) => ({ flock, scene })))
+		.then(({ flock, scene }) => {
+			window.dispatchEvent(new CustomEvent('flock:ready', { detail: { flock, params, dusk: scene } }));
+			const follow = () => {
+				const steer = () => flock.travel(travel());
+				addEventListener('scroll', steer, { passive: true });
+				steer();
+			};
+			if (resuming) {
+				percent.remove();
+				released();
+				follow();
+				return;
+			}
 			let ready = false;
 			Promise.all([loaded, document.fonts.ready]).then(() => (ready = true));
 			const start = performance.now();
@@ -94,9 +129,7 @@
 					flock.release();
 					percent.classList.add('gone');
 					released();
-					const steer = () => flock.travel(travel());
-					addEventListener('scroll', steer, { passive: true });
-					steer();
+					follow();
 				} else {
 					requestAnimationFrame(tick);
 				}

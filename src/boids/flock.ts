@@ -3,7 +3,7 @@ import countCode from './shaders/count.wgsl?raw';
 import scatterCode from './shaders/scatter.wgsl?raw';
 import flockCode from './shaders/flock.wgsl?raw';
 import { Scan } from './scan';
-import { box, type Params } from './params';
+import type { Params } from './params';
 import type { GpuTimer } from './timer';
 
 type Vec3 = ArrayLike<number>;
@@ -69,7 +69,7 @@ export class Flock {
 		this.device = device;
 		this.count = params.count;
 		const cellSize = params.radius;
-		this.dims = box.map((s) => Math.ceil(s / cellSize)) as [number, number, number];
+		this.dims = params.box.map((s) => Math.ceil(s / cellSize)) as [number, number, number];
 		this.cells = this.dims[0] * this.dims[1] * this.dims[2];
 
 		const buffer = (size: number, usage: number) => {
@@ -137,8 +137,8 @@ export class Flock {
 		const F = new Float32Array(this.sim);
 		const U = new Uint32Array(this.sim);
 		F.set(f.viewProj, 0);
-		F.set([-box[0] / 2, -box[1] / 2, -box[2] / 2, p.radius], 16);
-		F.set([...box, p.radius], 20);
+		F.set([-p.box[0] / 2, -p.box[1] / 2, -p.box[2] / 2, p.radius], 16);
+		F.set([...p.box, p.radius], 20);
 		U.set([...this.dims, this.count], 24);
 		F.set([f.goal[0], f.goal[1], f.goal[2], f.dt], 28);
 		F.set([f.camRight[0], f.camRight[1], f.camRight[2], f.aspect], 32);

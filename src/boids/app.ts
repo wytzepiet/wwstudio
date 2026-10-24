@@ -2,7 +2,7 @@ import { mat4, vec3 } from 'wgpu-matrix';
 import { Flock } from './flock';
 import { Renderer } from './renderer';
 import { GpuTimer } from './timer';
-import { box, PAST, type Params } from './params';
+import { PAST, type Params } from './params';
 
 /**
  * The loader: `gather` draws the flock into the ring, `progress` fills it (0 to 1; the ring spins
@@ -14,6 +14,9 @@ export interface FlockControl {
 	progress(p: number): void;
 	release(): void;
 	travel(t: number): void;
+	/** Set it into a scene from now on (see Placement), or take it out again with null. The
+	 *  placement is read every frame, so its camera can be moved by changing it. */
+	place(p: Placement | null): void;
 }
 
 export interface Stats {
@@ -25,6 +28,20 @@ export interface Stats {
 }
 
 const FOV = Math.PI / 3;
+
+/**
+ * The flock set into a scene of its own (see src/dusk): the scene's camera looks at it, the flock's
+ * box sits at `center` in the scene, `scale` scene units to one flock unit, and it is mirrored in
+ * water at height `water`. Vectors in scene units; `fov` vertical, in radians.
+ */
+export interface Placement {
+	eye: [number, number, number];
+	target: [number, number, number];
+	fov: number;
+	center: [number, number, number];
+	scale: number;
+	water: number;
+}
 
 const hexColor = (hex: string, intensity: number): [number, number, number, number] => {
 	const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
@@ -42,21 +59,35 @@ export async function startBoids(
 	{
 		held = false,
 		onStats,
-		onFlown
+		onFlown,
+		placed: placement = null,
+		device: shared,
+		onReflection
 	}: {
 		held?: boolean;
+		/** Run on this device rather than one of its own: the scene's, so they can share textures. */
+		device?: GPUDevice;
+		/** Placed, the flock's mirror image in the water is drawn into a texture (rather than on its
+		 *  canvas), for the scene's water to sample, rippled. Called whenever that texture is new. */
+		onReflection?: (texture: GPUTexture) => void;
+		/** Set into a scene instead of on its own: its camera, place and water. */
+		placed?: Placement | null;
 		onStats?: (s: Stats) => void;
 		/** Every frame: how far the camera has flown toward and past the flock, in world units. */
 		onFlown?: (flown: number) => void;
 	} = {}
 ): Promise<FlockControl> {
 	if (!navigator.gpu) throw new Error('WebGPU is not available in this browser.');
-	const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
-	if (!adapter) throw new Error('No WebGPU adapter found.');
-	const timing = adapter.features.has('timestamp-query');
-	const device = await adapter.requestDevice({ requiredFeatures: timing ? ['timestamp-query'] : [] });
-	device.lost.then((info) => console.error('WebGPU device lost:', info.message));
-	device.addEventListener('uncapturederror', (e) => console.error((e as GPUUncapturedErrorEvent).error.message));
+	let device = shared;
+	if (!device) {
+		const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
+		if (!adapter) throw new Error('No WebGPU adapter found.');
+		const timing = adapter.features.has('timestamp-query');
+		device = await adapter.requestDevice({ requiredFeatures: timing ? ['timestamp-query'] : [] });
+		device.lost.then((info) => console.error('WebGPU device lost:', info.message));
+		device.addEventListener('uncapturederror', (e) => console.error((e as GPUUncapturedErrorEvent).error.message));
+	}
+	const timing = device.features.has('timestamp-query');
 
 	const context = canvas.getContext('webgpu')!;
 	const format = navigator.gpu.getPreferredCanvasFormat();
@@ -76,7 +107,8 @@ export async function startBoids(
 		size = [w, h];
 		canvas.width = w;
 		canvas.height = h;
-		renderer.resize(w, h);
+		renderer.resize(w, h, !!onReflection);
+		if (onReflection) onReflection(renderer.reflection!);
 	};
 	let size = [0, 0];
 	new ResizeObserver(resize).observe(canvas);
@@ -128,8 +160,13 @@ export async function startBoids(
 	let burstAt: number | null = null;
 	let afterglow = 0;
 
+	// The first flight, through the flock to the first stop (travel 0 to 1), follows the scroll on a
+	// spring (critically damped, FOLLOW its rate): however quick the page snaps there, it eases in and
+	// out and takes about 4 / FOLLOW seconds. Past it, the camera keeps up with the scroll closely.
+	const FOLLOW = 2;
 	let travelTo = 0;
 	let travel = 0;
+	let travelSpeed = 0;
 
 	let frame = 0;
 	let last = performance.now();
@@ -138,6 +175,7 @@ export async function startBoids(
 	let simTime = 0;
 
 	const loop = (now: number) => {
+		const placed = placement;
 		resize();
 		const dt = Math.min((now - last) / 1000, 1 / 30);
 		last = now;
@@ -171,32 +209,52 @@ export async function startBoids(
 			goalAngle += (0.5 + Math.random()) * Math.PI;
 			nextHop = simTime + 2 + Math.random() * 2;
 		}
-		const goalTo = hold > 0 ? [0, 0, 0] : [Math.cos(goalAngle) * box[0] * 0.18, Math.sin(goalAngle) * box[1] * 0.18, 0];
+		const goalTo = hold > 0 ? [0, 0, 0] : [Math.cos(goalAngle) * params.box[0] * 0.18, Math.sin(goalAngle) * params.box[1] * 0.18, 0];
 		// The old site's goal jumped; this one glides there, about goalGlide seconds to get most of the way.
 		vec3.lerp(goal, goalTo, params.goalGlide > 0 ? 1 - Math.exp(-simDt / params.goalGlide) : 1, goal);
 
-		const ease = 1 - Math.exp(-dt * 3);
-		look.x += ((pointer.on ? pointer.x : 0) - look.x) * ease;
-		look.y += ((pointer.on ? pointer.y : 0) - look.y) * ease;
-		const yaw = look.x * 0.2;
-		const pitch = look.y * 0.12;
-		const orbit = vec3.create(
-			params.distance * Math.sin(yaw) * Math.cos(pitch),
-			params.distance * Math.sin(pitch),
-			params.distance * Math.cos(yaw) * Math.cos(pitch)
-		);
-		// Looking at the flock's middle, and flying that way as `travel` goes to 1.
-		travel += (travelTo - travel) * (1 - Math.exp(-dt * 12));
-		const ahead = vec3.normalize(vec3.negate(orbit));
-		const flown = travel * (params.distance + PAST);
-		onFlown?.(flown);
-		const camPos = vec3.addScaled(orbit, ahead, flown);
 		const aspect = canvas.width / canvas.height;
-		const viewMat = mat4.lookAt(camPos, vec3.add(camPos, ahead), [0, 1, 0]);
-		const viewProj = mat4.multiply(mat4.perspective(FOV, aspect, 10, 5000), viewMat);
+		let camPos, viewMat, fov, flown;
+		if (placed) {
+			// The scene's camera, in the flock's own units.
+			const toFlock = (p: [number, number, number]) => vec3.divScalar(vec3.sub(p, placed.center), placed.scale);
+			camPos = toFlock(placed.eye);
+			viewMat = mat4.lookAt(camPos, toFlock(placed.target), [0, 1, 0]);
+			fov = placed.fov;
+			flown = 0;
+		} else {
+			const ease = 1 - Math.exp(-dt * 3);
+			look.x += ((pointer.on ? pointer.x : 0) - look.x) * ease;
+			look.y += ((pointer.on ? pointer.y : 0) - look.y) * ease;
+			const yaw = look.x * 0.2;
+			const pitch = look.y * 0.12;
+			const orbit = vec3.create(
+				params.distance * Math.sin(yaw) * Math.cos(pitch),
+				params.distance * Math.sin(pitch),
+				params.distance * Math.cos(yaw) * Math.cos(pitch)
+			);
+			// Looking at the flock's middle, and flying that way as `travel` goes to 1.
+			if (Math.max(travel, travelTo) <= 1.001) {
+				travelSpeed += (FOLLOW * FOLLOW * (travelTo - travel) - 2 * FOLLOW * travelSpeed) * dt;
+				travel += travelSpeed * dt;
+			} else {
+				const was = travel;
+				travel += (travelTo - travel) * (1 - Math.exp(-dt * 12));
+				travelSpeed = dt > 0 ? (travel - was) / dt : 0;
+			}
+			const ahead = vec3.normalize(vec3.negate(orbit));
+			flown = travel * (params.distance + PAST);
+			onFlown?.(flown);
+			camPos = vec3.addScaled(orbit, ahead, flown);
+			viewMat = mat4.lookAt(camPos, vec3.add(camPos, ahead), [0, 1, 0]);
+			fov = FOV;
+		}
+		const viewProj = mat4.multiply(mat4.perspective(fov, aspect, 10, 20000), viewMat);
 		const camRight = vec3.create(viewMat[0], viewMat[4], viewMat[8]);
 		const camUp = vec3.create(viewMat[1], viewMat[5], viewMat[9]);
-		const tanHalfFov = Math.tan(FOV / 2);
+		const tanHalfFov = Math.tan(fov / 2);
+		// The flock's middle is this far off, for colouring by depth.
+		const middle = vec3.length(camPos);
 		const mouse: [number, number, number, number] = [lastPointer.x, lastPointer.y, pointer.x, pointer.y];
 		if (dt > 0) {
 			const k = 1 - Math.exp(-dt * 20);
@@ -205,7 +263,8 @@ export async function startBoids(
 		}
 		Object.assign(lastPointer, { x: pointer.x, y: pointer.y });
 
-		if (flock.count !== params.count || flock.dims[0] !== Math.ceil(box[0] / params.radius)) {
+		const dims = params.box.map((s) => Math.ceil(s / params.radius));
+		if (flock.count !== params.count || dims.some((d, i) => d !== flock.dims[i])) {
 			flock.destroy();
 			flock = new Flock(device, params);
 		}
@@ -237,7 +296,7 @@ export async function startBoids(
 			encoder,
 			context.getCurrentTexture().createView(),
 			flock.boids,
-			flock.count,
+			placed && params.mirror > 0 && !onReflection ? flock.count * 2 : flock.count,
 			{
 				viewProj,
 				camPos,
@@ -254,8 +313,13 @@ export async function startBoids(
 				minGlow: Math.max(params.minGlow, afterglow),
 				maxSpeed: params.maxSpeed,
 				// Colour by depth in the flock, not from the camera, so it holds as the camera flies in.
-				depthNear: params.distance - flown - box[2] / 2,
-				depthFar: params.distance - flown + box[2] / 2,
+				depthNear: placed ? middle - params.box[2] / 2 : params.distance - flown - params.box[2] / 2,
+				depthFar: placed ? middle + params.box[2] / 2 : params.distance - flown + params.box[2] / 2,
+				mirrorY: placed ? (placed.water - placed.center[1]) / placed.scale : 0,
+				mirror: placed ? params.mirror : 0,
+				count: flock.count,
+				ink: params.ink,
+				inkColor: hexColor(params.inkColor, 1).slice(0, 3) as [number, number, number],
 				// The old site faded by a fixed factor per frame; this is that factor at 60 fps.
 				fade: params.fade ** (dt * 60),
 				cut: params.cut * dt * 60,
@@ -264,7 +328,7 @@ export async function startBoids(
 				bloomRadius: params.bloomRadius,
 				saturation: params.saturation,
 				background: hexColor(params.background, 1).slice(0, 3) as [number, number, number],
-				horizon: params.horizon,
+				horizon: placed ? 0 : params.horizon,
 				time
 			},
 			timer
@@ -289,6 +353,7 @@ export async function startBoids(
 			progress = Math.min(Math.max(p, 0), 1);
 			if (progress < 1) ringAngle = 0;
 		},
+		place: (p) => (placement = p),
 		release: () => {
 			if (holdTo === 0 || tensing !== null) return;
 			tensing = performance.now();

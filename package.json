@@ -10,6 +10,7 @@
 	},
 	"dependencies": {
 		"@astrojs/sitemap": "^3.7.4",
+		"@babylonjs/lite": "1.36.0",
 		"astro": "^7.4.2",
 		"wgpu-matrix": "^3.4.2"
 	},

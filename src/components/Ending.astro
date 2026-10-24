@@ -1,0 +1,289 @@
+---
+// The end of the page: after the work, a line on black ("Still here?"), and then down into the
+// dusk (src/dusk), the flock now dark birds over a Frisian lake, and the email rising out of the
+// water. On the way down, "Say hi sometime" comes, and dissolves as the scene comes up.
+//
+// <Flock> makes the scene during the loader (on `canvas.dusk`) and says `flock:ready`. Once the line
+// is up, with the screen black, the flock is moved into the scene: there, it is dark against a sky
+// still black, so the change can't be seen. Scrolling on, the scene comes up out of the black as the
+// camera comes down from among the birds to the dike: the lake flattens to a strip, the shore rises
+// to the horizon, and the flock ends up overhead. Down, the email rises.
+//
+// Without the scene (or WebGPU) the email is an ordinary link on the last screen.
+const EMAIL = 'hello@wytze.dev';
+// For when mail goes unanswered: WhatsApp, at this number (country code and all, digits only).
+// TODO: the real number.
+const WHATSAPP = '31600000000';
+// Screens of scrolling from the line to the lake, beyond the one it takes to scroll the line away.
+const DESCENT = 1;
+---
+
+<canvas class="dusk" data-email={EMAIL} aria-hidden="true"></canvas>
+<!-- The scene's frame: its edge, a hairline, over the scene and the flock; and in a corner, a
+     while after the email has come up, a way round it if mail goes unanswered. -->
+<div class="frame">
+	<a class="whatsapp" href={`https://wa.me/${WHATSAPP}`} target="_blank" rel="noopener">Mailed me three weeks ago? Sorry. You can also WhatsApp me →</a>
+</div>
+<section class="boring">
+	<p>Still here?</p>
+</section>
+<div class="descent" style={`height: ${DESCENT * 100}vh`}></div>
+<section class="lake">
+	<p class="hi">Say hi sometime.</p>
+	<a class="email" href={`mailto:${EMAIL}`}>{EMAIL}</a>
+</section>
+
+<script>
+	import { placement, box } from '../dusk/scene';
+	import type { FlockControl } from '../boids/app';
+	import type { Params } from '../boids/params';
+	import { split, reveal } from '../reveal';
+
+	type Scene = Awaited<ReturnType<typeof import('../dusk/scene').startDusk>>;
+
+	/** The camera's way down: from HIGH metres to the dike, and as it comes, tilting down from TILT
+	 *  radians more up than it looks there, so the horizon comes up the screen a little. */
+	const HIGH = 150;
+	const TILT = 0.04;
+	/** On "Still here?", the camera looks up this much more, so the night fills the frame; it lowers
+	 *  its gaze over the first LOWER of the way down, settling slowly onto the horizon. */
+	const STARGAZE = 0.5;
+	const LOWER = 0.85;
+	/** Eases in, and out over a long, soft tail. */
+	const settle = (x: number) => 1 - (1 - smooth(x)) ** 2.5;
+	const DESCEND = 1.2;
+	const [, LOW] = placement.eye;
+	const LOOK_UP = Math.atan2(placement.target[1] - LOW, -placement.target[2]);
+
+	const html = document.documentElement;
+	const canvas = document.querySelector<HTMLCanvasElement>('canvas.dusk')!;
+	const boring = document.querySelector<HTMLElement>('.boring')!;
+	const lake = document.querySelector<HTMLElement>('.lake')!;
+	const link = document.querySelector<HTMLAnchorElement>('.lake .email')!;
+	const hi = document.querySelector<HTMLElement>('.lake .hi')!;
+	const birds = document.querySelector<HTMLCanvasElement>('canvas.flock')!;
+	const edge = document.querySelector<HTMLElement>('.frame')!;
+	const whatsapp = edge.querySelector<HTMLElement>('.whatsapp')!;
+	/** Seconds after the email has come up before the WhatsApp link does. */
+	const WHATSAPP_AFTER = 4;
+	/** The scene is framed as the site frames its pictures: it shows first as a work panel would
+	 *  (the panel's size and place, see .item in pages/index.astro), and opens out on the way down
+	 *  until a thin margin of the page is all that is left round it (`open`: 0 to 1). */
+	const RADIUS = 28;
+	const frameAt = (open: number) => {
+		const pad = Math.min(Math.max(16, innerWidth * 0.05), 64);
+		const panel = Math.min(innerWidth, 72 * 16) - 2 * pad;
+		const margin = Math.min(Math.max(12, innerWidth * 0.015), 24);
+		const side = (innerWidth - panel) / 2 + (margin - (innerWidth - panel) / 2) * open;
+		const end = innerHeight * 0.09 + (margin - innerHeight * 0.09) * open;
+		const clip = `inset(${end}px ${side}px round ${RADIUS}px)`;
+		canvas.style.clipPath = birds.style.clipPath = clip;
+		Object.assign(edge.style, { inset: `${end}px ${side}px` });
+	};
+	const clamp = (x: number) => Math.min(Math.max(x, 0), 1);
+	const smooth = (x: number) => x * x * (3 - 2 * x);
+	const ink = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255) as [number, number, number];
+
+	addEventListener('flock:ready', (e) => {
+		const { flock, params, dusk } = (e as CustomEvent<{ flock: FlockControl; params: Params; dusk: Scene | null }>).detail;
+		if (!dusk) return;
+		html.classList.add('dusk');
+		split(hi, { letters: true });
+		// The flock as it is on the page, and as dark birds against the sky (no bloom: as ink, a glow
+		// would be a dark smudge round it).
+		const page = { ...params };
+		const night = { ...params, box, ink: 1, mirror: 0.6, bloom: 0, streak: 1, size: 1.9 };
+		dusk.ink(night.gain, ink(night.inkColor));
+		const placed = { ...placement, eye: [...placement.eye], target: [...placement.target] } as typeof placement;
+
+		let inside = false;
+		let surfaced = false;
+		let surfacedAt = 0;
+		// How far down the camera is: it follows the scroll on a spring, so however fast the page gets
+		// there, the way down takes its time (nearly there in about 5 / DESCEND seconds) and eases in and out.
+		let down = 0;
+		let speed = 0;
+		let last = performance.now();
+		const frame = (now = performance.now()) => {
+			const dt = Math.min((now - last) / 1000, 1 / 20);
+			last = now;
+			const top = boring.getBoundingClientRect().top + scrollY;
+			const want = scrollY > top - innerHeight * 0.5;
+			if (want !== inside) {
+				inside = want;
+				Object.assign(params, inside ? night : page);
+				flock.place(inside ? placed : null);
+				dusk.run(inside);
+				canvas.classList.toggle('on', inside);
+				edge.classList.toggle('on', inside);
+				down = speed = 0;
+				if (!inside) {
+					birds.style.opacity = '';
+					birds.style.clipPath = '';
+					hi.classList.remove('out');
+					reveal(hi, false);
+					dusk.sink();
+					surfaced = false;
+					whatsapp.classList.remove('on');
+				}
+			}
+			if (inside) {
+				// The first stars are out as the line comes up, before anything else.
+				dusk.settings.stars = smooth(clamp((scrollY - top) / (innerHeight * 0.5) + 1));
+				const to = clamp((scrollY - top) / (lake.getBoundingClientRect().top + scrollY - top));
+				speed += (DESCEND * DESCEND * (to - down) - 2 * DESCEND * speed) * dt;
+				down += speed * dt;
+				const p = clamp(down);
+				frameAt(smooth(clamp(p / 0.7)));
+				const y = HIGH + (LOW - HIGH) * p;
+				const pitch = LOOK_UP + TILT * (1 - p) + STARGAZE * (1 - settle(clamp(p / LOWER)));
+				placed.eye = [0, y, 0];
+				placed.target = [0, y + 100 * Math.tan(pitch), -100];
+				dusk.look(placed.eye, placed.target);
+				dusk.settings.exposure = smooth(clamp(p / 0.7));
+				// "Say hi sometime" as the way down starts; near the bottom it dissolves, a word at a time
+				// drifting up, fading and blurring, as the camera leaves it behind.
+				reveal(hi, p > 0.02);
+				hi.classList.toggle('out', p > 0.68);
+				// Dark birds against black still show a little: they come up with the scene.
+				birds.style.opacity = String(clamp(dusk.settings.exposure * 2));
+				if (p > 0.97 && !surfaced) {
+					surfaced = true;
+					surfacedAt = now;
+					dusk.surface();
+				}
+				whatsapp.classList.toggle('on', surfaced && now - surfacedAt > WHATSAPP_AFTER * 1000);
+				// The link lies over the email the scene draws.
+				const r = dusk.emailRect(innerWidth, innerHeight);
+				Object.assign(link.style, { left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${r.height}px` });
+				link.style.visibility = r.visible && p > 0.97 ? 'visible' : 'hidden';
+			}
+			requestAnimationFrame(frame);
+		};
+		frame();
+	});
+</script>
+
+<style>
+	/* Behind the flock, and only there once it is in the scene. */
+	.dusk {
+		position: fixed;
+		inset: 0;
+		z-index: 0;
+		display: block;
+		width: 100%;
+		height: 100%;
+		visibility: hidden;
+		pointer-events: none;
+	}
+	.dusk.on {
+		visibility: visible;
+	}
+	/* The frame's edge, as the work panels have it. */
+	.frame {
+		position: fixed;
+		z-index: 2;
+		border-radius: 28px;
+		box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.08);
+		pointer-events: none;
+		visibility: hidden;
+	}
+	.frame.on {
+		visibility: visible;
+	}
+	/* Small, in the bottom corner, in the site's grey; it settles in after the email. */
+	.whatsapp {
+		position: absolute;
+		right: 26px;
+		bottom: 22px;
+		font-size: 0.8125rem;
+		color: var(--subtle, #8a93a8);
+		text-decoration: none;
+		pointer-events: auto;
+		opacity: 0;
+		translate: 0 6px;
+		visibility: hidden;
+		transition:
+			opacity 1.2s,
+			translate 1.2s cubic-bezier(0.2, 0.8, 0.2, 1),
+			color 0.2s,
+			visibility 0s 1.2s;
+	}
+	.whatsapp.on {
+		opacity: 1;
+		translate: 0 0;
+		visibility: visible;
+		transition:
+			opacity 1.2s,
+			translate 1.2s cubic-bezier(0.2, 0.8, 0.2, 1),
+			color 0.2s;
+	}
+	.whatsapp:hover,
+	.whatsapp:focus-visible {
+		color: #fff;
+	}
+	.boring,
+	.lake {
+		position: relative;
+		z-index: 3;
+		height: 100vh;
+		display: grid;
+		place-items: center;
+		padding: clamp(16px, 5vw, 64px);
+		box-sizing: border-box;
+		scroll-snap-align: start;
+		scroll-snap-stop: always;
+		/* They lie over the scene and its frame: only what is in them takes the pointer. */
+		pointer-events: none;
+	}
+	.boring > *,
+	.lake .email {
+		pointer-events: auto;
+	}
+	.boring p,
+	.hi {
+		margin: 0;
+		white-space: pre-line;
+		text-align: center;
+		text-wrap: balance;
+		font-size: clamp(2rem, 4.5vw, 3.5rem);
+		font-weight: 700;
+		line-height: 1.08;
+		letter-spacing: -0.03em;
+	}
+	.descent {
+		pointer-events: none;
+	}
+	/* Without the scene, it stands over the link; with it, in the middle of the screen. */
+	.lake {
+		align-content: center;
+		gap: 2rem;
+	}
+	:global(html.dusk) .hi {
+		position: fixed;
+		inset: 50% 0 auto;
+		translate: 0 -50%;
+		padding: 0 clamp(16px, 5vw, 64px);
+		pointer-events: none;
+	}
+	/* Without the scene, an ordinary link. */
+	.email {
+		font-size: clamp(1.5rem, 4vw, 3rem);
+		font-weight: 600;
+		color: #fff;
+		text-decoration: none;
+	}
+	/* With it, the scene draws the email and the link lies over it, unseen. */
+	:global(html.dusk) .email {
+		position: fixed;
+		z-index: 3;
+		color: transparent;
+		overflow: hidden;
+		white-space: nowrap;
+		visibility: hidden;
+	}
+	:global(html.dusk) .email:focus-visible {
+		outline: 1px solid rgb(255 255 255 / 0.6);
+		outline-offset: 4px;
+	}
+</style>

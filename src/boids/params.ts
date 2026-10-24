@@ -4,8 +4,6 @@ export const FLY = 2.2;
 export const PAST = 1400;
 export const STEP = 900;
 
-/** World units: the flock lives in a box this big, centred on the origin. */
-export const box = [1600, 1000, 1000] as const;
 
 /** The old site's palettes, near → far, names and all. */
 export const palettes: Record<string, [string, string]> = {
@@ -19,6 +17,8 @@ export const palettes: Record<string, [string, string]> = {
 };
 
 export const defaults = {
+	/** World units: the flock lives in a box this big (width, height, depth), centred on its origin. */
+	box: [1600, 1000, 1000] as [number, number, number],
 	tempo: 0.59,
 	/** How far the camera is from the flock's centre; the old site's was 1000. */
 	distance: 1060,
@@ -61,9 +61,16 @@ export const defaults = {
 	bloomRadius: 1,
 	saturation: 4,
 	resolution: 2,
-	/** The old site's dark background, hsl(242 95% 4%). */
-	background: '#010014',
-	horizon: 0.5
+	/** The page's background, which the flock fogs into far off: a blue so deep and dark it is
+	 *  nearly black, hsl(232 100% 3%). (The old site's was hsl(242 95% 4%), #010014.) */
+	background: '#00020f',
+	horizon: 0.5,
+	/** In a scene (the dusk): how strongly the flock is mirrored in the water, and how much it is
+	 *  dark ink against the sky rather than light, and of what colour: a little darker than the
+	 *  dusk's navy ground. */
+	mirror: 0.5,
+	ink: 0,
+	inkColor: '#010510'
 };
 
 export type Params = typeof defaults;

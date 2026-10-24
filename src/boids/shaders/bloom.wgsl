@@ -9,8 +9,9 @@
 
 struct Post {
 	strength: f32, gain: f32, time: f32, fade: f32,
-	saturation: f32, cut: f32, horizon: f32, _a: f32,
+	saturation: f32, cut: f32, horizon: f32, ink: f32,
 	background: vec4f,
+	inkColor: vec4f,
 }
 
 @group(0) @binding(0) var src: texture_2d<f32>;
@@ -82,7 +83,9 @@ fn composite(in: Out) -> @location(0) vec4f {
 	let gray = dot(bloom, vec3f(0.2126, 0.7152, 0.0722));
 	bloom = max(mix(vec3f(gray), bloom, post.saturation), vec3f(0.0));
 	let c = clamp(1.0 - exp(-(scene * post.gain + bloom * post.strength)) + dither(in.pos.xy) / 255.0, vec3f(0.0), vec3f(1.0));
-	let light = vec4f(c, max(c.r, max(c.g, c.b)));
+	let a = max(c.r, max(c.g, c.b));
+	// Light is as opaque as it is bright. As ink, the same amount of it is that much dark instead.
+	let light = mix(vec4f(c, a), vec4f(post.inkColor.rgb * a, a), post.ink);
 	// The fog: the page's colour at the bottom, gone by the middle (the old gradient, 1.25× tall).
 	let up = 1.0 - in.uv.y;
 	let fog = clamp(1.0 - (up + 0.125) / 0.625, 0.0, 1.0) * post.horizon;

@@ -6,6 +6,8 @@ import { defaults, FLY, PAST, STEP } from '../boids/params';
 import sprawl from '../images/work/sprawl.png';
 import baantower from '../images/work/baantower.webp'; // render from prsc.nl
 import DotGrid from '../components/DotGrid.astro';
+import Ending from '../components/Ending.astro';
+import Reveal from '../components/Reveal.astro';
 
 // The flight (see <Flock>): the first FLY screens take the camera through the flock to PAST
 // beyond it; each screen after that flies on STEP. The intro is said one line a screen, each line
@@ -49,7 +51,7 @@ const work = [
 ];
 ---
 
-<html lang="en" class="free">
+<html lang="en">
 	<head>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -64,7 +66,7 @@ const work = [
 		<!-- In the flock's space: the headline floats in front of the flock, the intro's lines wait
 		     beyond it, one stop each. -->
 		<main data-depth="300">
-			<Headline lines={['Making is easy now.', "Knowing what to make isn't."]} />
+			<Headline lines={['Building things is easy now.', "Knowing what to build isn't."]} />
 		</main>
 		{
 			stops.map((stop, k) => (
@@ -109,6 +111,16 @@ const work = [
 				))
 			}
 		</section>
+		<Ending />
+		<Reveal />
+
+		<script>
+			import { split, revealInView } from '../reveal';
+			// The intro's lines come in as the camera reaches them (see <Flock>), the rest as they scroll
+			// into view.
+			document.querySelectorAll<HTMLElement>('.stop .text').forEach((el) => split(el));
+			revealInView(document.querySelectorAll<HTMLElement>('.item h3, .boring p'));
+		</script>
 
 		<script>
 			// Each panel, once the next starts sliding over it, shrinks a little and dims behind it.
@@ -128,15 +140,6 @@ const work = [
 			stack();
 		</script>
 
-		<script define:vars={{ FLY }}>
-			// The flight through the flock scrolls freely; from the intro's lines on, every gesture comes
-			// to rest on the next line or panel.
-			const html = document.documentElement;
-			const lock = () => html.classList.toggle('free', scrollY / innerHeight < FLY - 0.02);
-			addEventListener('scroll', lock, { passive: true });
-			lock();
-		</script>
-
 		<style>
 			/* The old site's scroll lock: every gesture comes to rest on the next stop, never between or
 			   past one; no scrollbar. */
@@ -147,9 +150,6 @@ const work = [
 			}
 			html::-webkit-scrollbar {
 				display: none;
-			}
-			html.free {
-				scroll-snap-type: none;
 			}
 			html,
 			body {

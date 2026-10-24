@@ -1,0 +1,156 @@
+---
+// The dusk scene on its own, for working on it: the lake, its sky and its far shore.
+---
+
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Dusk</title>
+	</head>
+	<body>
+		<canvas id="dusk"></canvas>
+		<canvas id="flock"></canvas>
+		<!-- The email the scene draws in the water: the real link, laid over it. -->
+		<a id="email" href="mailto:hello@wytze.dev">hello@wytze.dev</a>
+		<aside>
+			<label>sun azimuth <input type="range" name="azimuth" min="-60" max="60" step="0.5" value="18" /></label>
+			<label>sun elevation <input type="range" name="elevation" min="-6" max="6" step="0.1" value="-1.2" /></label>
+			<label>palette <select name="palette"></select></label>
+			<button id="surface">surface</button>
+			<label>exposure <input type="range" name="exposure" min="0.3" max="2" step="0.05" value="1" /></label>
+		</aside>
+		<p id="error" hidden></p>
+
+		<script>
+			import { startDusk, placement, box, type Dusk } from '../dusk/scene';
+			import { startBoids } from '../boids/app';
+			import { defaults } from '../boids/params';
+			import { palettes } from '../dusk/palettes';
+
+			const inputs = [...document.querySelectorAll<HTMLInputElement>('aside input')];
+			const value = (name: string) => Number(inputs.find((i) => i.name === name)!.value);
+			const settings: Dusk = { sun: { azimuth: 0, elevation: 0 }, exposure: 1, stars: 1, email: 'hello@wytze.dev' };
+			const read = () => {
+				settings.sun.azimuth = value('azimuth');
+				settings.sun.elevation = value('elevation');
+				settings.exposure = value('exposure');
+			};
+			inputs.forEach((i) => i.addEventListener('input', read));
+			read();
+			// Try the sky's palettes.
+			const palette = document.querySelector<HTMLSelectElement>('select[name=palette]')!;
+			palette.append(...Object.keys(palettes).map((name) => new Option(name, name)));
+			palette.addEventListener('change', () => (settings.palette = palettes[palette.value]));
+
+			// The flock, as dark birds against the sky: dots with a short tail, and no bloom (as ink, a
+			// glow would be a dark smudge round it). It shares the scene's GPU device, so its mirror image
+			// can be a texture the water samples, rippled.
+			const flock = { ...defaults, box, ink: 1, mirror: 0.6, bloom: 0, streak: 1, size: 1.9 };
+			Object.assign(window, { flock });
+			const ink = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255) as [number, number, number];
+
+			startDusk(document.querySelector<HTMLCanvasElement>('#dusk')!, settings)
+				.then((dusk) => {
+					dusk.ink(flock.gain, ink(flock.inkColor));
+					// The email rises after a moment; the link follows it on screen.
+					setTimeout(dusk.surface, 2500);
+					document.querySelector<HTMLButtonElement>('#surface')!.onclick = dusk.surface;
+					const link = document.querySelector<HTMLAnchorElement>('#email')!;
+					const follow = () => {
+						const r = dusk.emailRect(innerWidth, innerHeight);
+						Object.assign(link.style, { left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${r.height}px` });
+						link.style.visibility = r.visible ? 'visible' : 'hidden';
+						requestAnimationFrame(follow);
+					};
+					follow();
+					return startBoids(document.querySelector<HTMLCanvasElement>('#flock')!, flock, {
+						placed: placement,
+						device: dusk.device,
+						onReflection: dusk.reflect
+					});
+				})
+				.catch((e: Error) => {
+					const error = document.querySelector<HTMLElement>('#error')!;
+					error.textContent = e.message;
+					error.hidden = false;
+					console.error(e);
+				});
+		</script>
+
+		<style>
+			html,
+			body {
+				margin: 0;
+				height: 100%;
+				background: #000;
+				overflow: hidden;
+				font: 11px/1.4 ui-monospace, 'SF Mono', Menlo, monospace;
+				color: #fff;
+			}
+			canvas {
+				position: fixed;
+				inset: 0;
+				display: block;
+				width: 100vw;
+				height: 100vh;
+			}
+			#flock {
+				pointer-events: none;
+			}
+			/* Clickable and readable, but the scene draws it: the link itself is invisible. */
+			#email {
+				position: fixed;
+				color: transparent;
+				overflow: hidden;
+				white-space: nowrap;
+			}
+			#email:focus-visible {
+				outline: 1px solid rgb(255 255 255 / 0.6);
+				outline-offset: 4px;
+			}
+			button {
+				font: inherit;
+				color: inherit;
+				background: none;
+				border: 1px solid rgb(255 255 255 / 0.2);
+				padding: 3px 6px;
+				cursor: pointer;
+			}
+			aside {
+				position: fixed;
+				right: 16px;
+				bottom: 16px;
+				display: grid;
+				gap: 6px;
+				padding: 10px;
+				background: rgb(0 0 0 / 0.6);
+				border: 1px solid rgb(255 255 255 / 0.15);
+			}
+			label {
+				display: grid;
+				grid-template-columns: 100px 160px;
+				align-items: center;
+			}
+			input {
+				accent-color: #fff;
+			}
+			select {
+				font: inherit;
+				color: inherit;
+				background: #000;
+				border: 1px solid rgb(255 255 255 / 0.2);
+			}
+			#error[hidden] {
+				display: none;
+			}
+			#error {
+				position: fixed;
+				inset: 0;
+				display: grid;
+				place-items: center;
+				margin: 0;
+			}
+		</style>
+	</body>
+</html>
