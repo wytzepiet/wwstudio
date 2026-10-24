@@ -1,12 +1,12 @@
-/* On the right edge, in the middle, over everything; in once the loader has let go. */
+/* On the right edge, in the middle, over everything; in once the loader has let go. It reaches out
+   to the left a good way, so the pointer is felt coming near before it is on a line. */
 .ticker {
 	position: fixed;
 	z-index: 4;
-	right: clamp(12px, 2vw, 28px);
+	right: 0;
 	top: 50%;
 	translate: 0 -50%;
-	display: grid;
-	justify-items: end;
+	padding: 48px clamp(12px, 2vw, 28px) 48px 72px;
 	opacity: 0;
 	transition: opacity 0.8s;
 	pointer-events: none;
@@ -15,11 +15,18 @@
 	opacity: 1;
 	pointer-events: auto;
 }
-/* Each line sits in a taller target, so it is easy to hit. */
+.ticker .lines {
+	display: grid;
+	justify-items: end;
+}
+/* Each line sits in a taller target, so it is easy to hit. --swell (0 to 1) is how much it leans
+   toward the pointer. */
 .ticker button {
+	--swell: 0;
+	position: relative;
 	display: block;
-	width: 28px;
-	height: 12px;
+	width: 40px;
+	height: 12px; /* SPACING in Ticker.tsx */
 	padding: 0;
 	border: 0;
 	background: none;
@@ -27,25 +34,56 @@
 }
 .ticker button::after {
 	content: '';
-	display: block;
-	width: 8px;
+	position: absolute;
+	right: 0;
+	top: 50%;
+	width: calc(8px + 22px * var(--swell));
 	height: 1px;
-	margin-left: auto;
-	background: rgb(255 255 255 / 0.3);
+	translate: 0 -50%;
+	background: rgb(255 255 255 / calc(0.3 + 0.5 * var(--swell)));
 	transition:
-		width 0.5s cubic-bezier(0.2, 0.8, 0.2, 1),
-		background-color 0.5s;
-}
-.ticker button:hover::after {
-	width: 14px;
-	background: rgb(255 255 255 / 0.6);
+		width 0.25s cubic-bezier(0.2, 0.8, 0.2, 1),
+		height 0.25s,
+		background-color 0.25s;
 }
 .ticker button.at::after {
-	width: 24px;
+	width: calc(24px + 10px * var(--swell));
 	height: 2px;
 	background: #fff;
+}
+/* What the nearest line is, beside it on the left, small; with a soft dark halo, so it reads over
+   the bright flock too. */
+.ticker .label {
+	position: absolute;
+	right: calc(100% + 4px);
+	top: 50%;
+	translate: 6px -50%;
+	white-space: nowrap;
+	font: 500 0.6875rem / 1 ui-monospace, 'SF Mono', Menlo, monospace;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: rgb(255 255 255 / 0.75);
+	text-shadow: 0 0 10px rgb(0 2 15 / 0.9), 0 0 3px rgb(0 2 15 / 0.9);
+	opacity: 0;
+	pointer-events: none;
+	transition:
+		opacity 0.2s,
+		translate 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.ticker button.near .label {
+	opacity: 1;
+	translate: 0 -50%;
+}
+.ticker button.at.near .label {
+	color: #fff;
 }
 .ticker button:focus-visible {
 	outline: 1px solid rgb(255 255 255 / 0.6);
 	outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+	.ticker button::after,
+	.ticker .label {
+		transition: none;
+	}
 }

@@ -15,12 +15,13 @@ import './home.css';
 // it; each screen after that flies on STEP. The intro is said one line a screen, each line a stop on
 // the way, arriving at its own size as the camera reaches it.
 const D = defaults.distance;
+// Each with what it is called on the ticker.
 const lines = [
-	"Hi, I'm Wytze, a developer in Rotterdam.",
-	'I build websites, apps, backends and interactive things like the one you just flew through.',
-	'Code got cheap.',
-	"What I bring is the part that didn't: an eye for what's good, the judgement to choose, and the ability to express exactly what it should be.",
-	'Take a look at some of my work.'
+	{ label: 'Hi', text: "Hi, I'm Wytze, a developer in Rotterdam." },
+	{ label: 'What I build', text: 'I build websites, apps, backends and interactive things like the one you just flew through.' },
+	{ label: 'Code got cheap', text: 'Code got cheap.' },
+	{ label: 'What I bring', text: "What I bring is the part that didn't: an eye for what's good, the judgement to choose, and the ability to express exactly what it should be." },
+	{ label: 'The work', text: 'Take a look at some of my work.' }
 ];
 // From the last stop the page scrolls as pages do: the work, whose first project already peeks in
 // at the bottom of the screen there (PEEK of a screen down).
@@ -28,8 +29,9 @@ const PEEK = 0.82;
 const lastStop = FLY + lines.length - 1;
 // Stop k is reached after FLY + k screens: it sits D beyond where the camera is then. The first
 // fades in from further off; the last recedes as the work slides over it.
-const stops = lines.map((text, k) => ({
+const stops = lines.map(({ text, label }, k) => ({
 	text,
+	label,
 	scroll: FLY + k,
 	plane: { depth: -(D + PAST) - k * STEP, at: D, fade: k === 0 ? 3 : 1.8, recede: k === lines.length - 1 ? PEEK - TOP : undefined }
 }));
@@ -62,8 +64,8 @@ export default function Home() {
 				</div>
 				<Work />
 				<Ending />
-				{/* The hero, the intro's lines, the projects, "Still here?" and the lake. */}
-				<Ticker count={1 + stops.length + work.length + 2} />
+				{/* Where you are: the hero, the intro's lines, the projects, "Still here?" and the lake. */}
+				<Ticker labels={['Start', ...stops.map((s) => s.label), ...work.map((w) => w.name), 'Still here?', 'Say hi']} />
 			</div>
 		</Stage>
 	);
