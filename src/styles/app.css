@@ -1,0 +1,157 @@
+@import 'tailwindcss';
+
+/* The site's few tokens. No font of our own: everyone reads it in their system's (SF Pro on Apple,
+   Segoe UI on Windows, Roboto on Android). Nothing to download, native everywhere. */
+@theme {
+	--font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+	--font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
+	/* The page: a blue so deep and dark it is nearly black. */
+	--color-page: #00020f;
+	/* All secondary text: a grey with a little blue in it. */
+	--color-subtle: #8a93a8;
+	/* The site's titles. */
+	--text-title: clamp(2rem, 4.5vw, 3.5rem);
+	--text-title--line-height: 1.08;
+	--text-title--letter-spacing: -0.03em;
+	--text-title--font-weight: 700;
+	/* The margin round everything. */
+	--spacing-gutter: clamp(16px, 5vw, 64px);
+	--radius-panel: 28px;
+	--ease-out-soft: cubic-bezier(0.2, 0.8, 0.2, 1);
+	/* The tool pages' dim text and hairlines. */
+	--color-dim: #ffffff80;
+	--color-line: #ffffff26;
+}
+
+@layer base {
+	html,
+	body {
+		@apply min-h-full bg-page font-sans text-white;
+	}
+}
+
+/* What reads better written out than as classes. */
+@layer components {
+	/* The home page: the old site's scroll lock, every gesture coming to rest on the next stop and
+	   never between or past one, with no scrollbar; and while the loader runs, no scrolling. */
+	:root:has(.home) {
+		scroll-snap-type: y mandatory;
+		scroll-behavior: smooth;
+		scrollbar-width: none;
+	}
+	:root:has(.home)::-webkit-scrollbar {
+		display: none;
+	}
+	:root:has(.home.loading) {
+		overflow: hidden;
+	}
+	/* The tool pages (/dusk, /sandbox) fill the window and never scroll. */
+	:root:has(.locked) {
+		height: 100%;
+		overflow: hidden;
+	}
+
+	/* Titles that come in a piece at a time (see Reveal.tsx): out, a piece lies a little low, faint
+	   and soft; in, it settles into place, each a moment after the one before (--i × --stagger). It
+	   goes out at once, all together, so it is ready to come in again; played out (`out`), each
+	   drifts up, fading and blurring away, slowly, one after another. */
+	.reveal .word {
+		display: inline-block;
+	}
+	.reveal .word > span {
+		display: inline-block;
+		transform: translateY(0.3em);
+		opacity: 0;
+		filter: blur(5px);
+		transition:
+			transform 0.3s,
+			opacity 0.3s,
+			filter 0.3s;
+	}
+	.reveal.in .word > span {
+		transform: none;
+		opacity: 1;
+		filter: none;
+		transition:
+			transform 1.1s var(--ease-out-soft),
+			opacity 0.9s,
+			filter 0.9s;
+		transition-delay: calc(var(--i) * var(--stagger));
+	}
+	.reveal.in.out .word > span {
+		transform: translateY(-1.5em);
+		opacity: 0;
+		filter: blur(6px);
+		transition:
+			transform 1.8s cubic-bezier(0.4, 0, 0.6, 1),
+			opacity 1.5s,
+			filter 1.5s;
+		transition-delay: calc(var(--i) * var(--stagger) * 3);
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.reveal .word > span {
+			transform: none;
+			opacity: 1;
+			filter: none;
+			transition: none;
+		}
+		.reveal.in.out .word > span {
+			opacity: 0;
+		}
+	}
+
+	/* The headline (Headline.tsx): until it has played, a letter shows only once it is on, so the
+	   finished headline never flashes up first (it is rendered so on the server too); with reduced
+	   motion it simply stands there. A letter still being worked out keeps its width, empty, and
+	   the noise layer over the line shows a random glyph in its place: the layer is see-through as
+	   one, so where two glyphs overlap they don't add up. */
+	@media (prefers-reduced-motion: no-preference) {
+		.headline:not(.done) .ch:not(.on) {
+			opacity: 0;
+		}
+	}
+	.headline .noise .ch[data-glyph]::after {
+		content: attr(data-glyph);
+		position: absolute;
+		inset: 0;
+		text-align: center;
+		color: var(--color-subtle);
+		font-weight: 400;
+	}
+	.headline .ch.caret::after {
+		content: '';
+		position: absolute;
+		top: 0.08em;
+		bottom: 0.04em;
+		right: -0.12em;
+		width: 0.06em;
+		background: currentColor;
+	}
+
+	/* The ticker's lines (Ticker.tsx): each leans toward the pointer by --swell (0 to 1); the one you
+	   are at is long and white. */
+	.ticker-line::after {
+		content: '';
+		position: absolute;
+		right: 0;
+		top: 50%;
+		width: calc(8px + 22px * var(--swell));
+		height: 1px;
+		translate: 0 -50%;
+		background: rgb(255 255 255 / calc(0.3 + 0.5 * var(--swell)));
+		transition:
+			width 0.25s var(--ease-out-soft),
+			height 0.25s,
+			background-color 0.25s;
+	}
+	.ticker-line.at::after {
+		width: calc(24px + 10px * var(--swell));
+		height: 2px;
+		background: #fff;
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.ticker-line::after {
+			transition: none;
+		}
+	}
+}

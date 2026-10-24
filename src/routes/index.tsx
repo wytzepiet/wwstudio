@@ -9,7 +9,6 @@ import Ticker from '../components/Ticker';
 import Work, { TOP, work } from '../components/Work';
 import { createPlane } from '../plane';
 import { createStage, Stage } from '../stage';
-import './home.css';
 
 // The flight (see <Flock>): the first FLY screens take the camera through the flock to PAST beyond
 // it; each screen after that flies on STEP. The intro is said one line a screen, each line a stop on
@@ -26,6 +25,10 @@ const lines = [
 // From the last stop the page scrolls as pages do: the work, whose first project already peeks in
 // at the bottom of the screen there (PEEK of a screen down).
 const PEEK = 0.82;
+/** A plane of the page in the flock's space (see plane.ts): it fills the screen and carries its own
+ *  perspective, so planes behind the flock can lie under the canvas and those in front over it. It
+ *  lets the pointer through; only its content takes it. */
+const PLANE = 'pointer-events-none fixed inset-0 will-change-[transform,opacity] *:pointer-events-auto';
 const lastStop = FLY + lines.length - 1;
 // Stop k is reached after FLY + k screens: it sits D beyond where the camera is then. The first
 // fades in from further off; the last recedes as the work slides over it.
@@ -45,22 +48,25 @@ export default function Home() {
 			<Title>Wytze Sligting</Title>
 			<div class={['home', { loading: !stage.released() }]}>
 				<Flock />
-				<main class="plane hero" style={hero.style()} inert={hero.inert()}>
+				<main class={[PLANE, 'box-border grid content-end p-gutter']} style={hero.style()} inert={hero.inert()}>
 					<Headline lines={['Building things is easy now.', "Knowing what to build isn't."]} />
 				</main>
 				<For each={stops}>
 					{(stop) => {
 						const plane = createPlane(stage, stop.plane);
 						return (
-							<section class="plane stop" style={plane.style()} inert={plane.inert()}>
-								<Reveal class="text" text={stop.text} in={plane.shown()} />
+							<section class={[PLANE, 'box-border grid place-content-center p-gutter text-center']} style={plane.style()} inert={plane.inert()}>
+								<Reveal class="m-0 max-w-2xl text-title text-balance" text={stop.text} in={plane.shown()} />
 							</section>
 						);
 					}}
 				</For>
-				{/* The flight's length, and where scrolling comes to rest: the hero and each stop. */}
-				<div class="runway" style={{ height: `${(lastStop + PEEK) * 100}vh` }}>
-					<For each={[0, ...stops.map((s) => s.scroll)]}>{(at) => <div class="rest" style={{ top: `${at * 100}vh` }} />}</For>
+				{/* The flight's length, and where scrolling comes to rest: the hero and each stop. It lies over
+				    the planes behind the flock, so it lets the pointer through. */}
+				<div class="pointer-events-none relative" style={{ height: `${(lastStop + PEEK) * 100}vh` }}>
+					<For each={[0, ...stops.map((s) => s.scroll)]}>
+						{(at) => <div data-rest class="pointer-events-none absolute h-screen snap-start snap-always" style={{ top: `${at * 100}vh` }} />}
+					</For>
 				</div>
 				<Work />
 				<Ending />

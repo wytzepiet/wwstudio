@@ -2,7 +2,6 @@ import { createEffect, createMemo, createSignal, createStore, deep, For, onSettl
 import { Title } from '@solidjs/meta';
 import { startBoids, type FlockControl, type Stats } from '../boids/app';
 import { defaults, palettes, sliders, type Params, type Slider as SliderSpec } from '../boids/params';
-import './sandbox.css';
 
 const STORE = 'boids-sandbox-3';
 const fresh = (): Params => structuredClone(defaults);
@@ -61,22 +60,28 @@ export default function Sandbox() {
 
 	return (
 		// The canvas is see-through: the background is the page's.
-		<div class={['sandbox', { bare: bare() }]} style={{ background: params.background }}>
+		<div class="locked fixed inset-0 font-mono text-[11px] leading-snug text-white [color-scheme:dark]" style={{ background: params.background }}>
 			<Title>Boids sandbox</Title>
-			<canvas ref={canvas} />
-			<pre class="stats">{flock()?.stats() ? describe(flock()!.stats()!) : ''}</pre>
-			<aside class="panel">
+			<canvas class="fixed inset-0 block size-full touch-none" ref={canvas} />
+			<pre class={['pointer-events-none fixed top-4 left-4 m-0 text-dim', { hidden: bare() }]}>{flock()?.stats() ? describe(flock()!.stats()!) : ''}</pre>
+			<aside
+				class={[
+					'fixed top-4 right-4 bottom-4 w-75 overflow-y-auto border border-line bg-black/70 p-3 backdrop-blur-md max-sm:top-auto max-sm:left-4 max-sm:h-[45%] max-sm:w-auto',
+					{ hidden: bare() }
+				]}
+			>
 				<For each={sliders}>
 					{(group) => (
 						<section>
-							<h2>{group.group}</h2>
+							<h2 class="mt-3.5 mb-1.5 text-[length:inherit] font-normal tracking-widest text-dim uppercase">{group.group}</h2>
 							<For each={group.items}>{(spec) => <Slider spec={spec} value={params[spec.key]} set={(v) => set(spec.key, v)} />}</For>
 						</section>
 					)}
 				</For>
-				<div class="row" title="Colour pairs from the old site.">
+				<div class="grid min-h-5.5 grid-cols-[90px_1fr_56px] items-center gap-2" title="Colour pairs from the old site.">
 					<label>palette</label>
 					<select
+						class="col-span-2 border border-line bg-black px-1 py-0.75"
 						value={palette()}
 						onChange={(e) => {
 							const pair = palettes[e.currentTarget.value];
@@ -93,27 +98,27 @@ export default function Sandbox() {
 				<Color label="near" hint="Colour of boids near the camera. Toward far it sweeps through the hues in between." value={params.nearColor} set={(v) => set('nearColor', v)} />
 				<Color label="far" hint="Colour of boids far from the camera." value={params.farColor} set={(v) => set('farColor', v)} />
 				<Color label="background" hint="What everything sits on." value={params.background} set={(v) => set('background', v)} />
-				<div class="buttons">
-					<button type="button" title="Draw the flock into the loader ring." onClick={() => flock()?.gather()}>
+				<div class="mt-3.5 flex gap-1">
+					<button type="button" class="flex-1 cursor-pointer border border-line px-1.5 py-1 text-dim hover:bg-white hover:text-black" title="Draw the flock into the loader ring." onClick={() => flock()?.gather()}>
 						gather
 					</button>
-					<button type="button" title="Let the ring burst into the flock." onClick={() => flock()?.release()}>
+					<button type="button" class="flex-1 cursor-pointer border border-line px-1.5 py-1 text-dim hover:bg-white hover:text-black" title="Let the ring burst into the flock." onClick={() => flock()?.release()}>
 						release
 					</button>
 				</div>
-				<div class="buttons">
-					<button type="button" onClick={() => navigator.clipboard.writeText(JSON.stringify(snapshot(params), null, '\t'))}>
+				<div class="mt-3.5 flex gap-1">
+					<button type="button" class="flex-1 cursor-pointer border border-line px-1.5 py-1 text-dim hover:bg-white hover:text-black" onClick={() => navigator.clipboard.writeText(JSON.stringify(snapshot(params), null, '\t'))}>
 						copy
 					</button>
-					<button type="button" onClick={() => setParams((s) => Object.assign(s, fresh()))}>
+					<button type="button" class="flex-1 cursor-pointer border border-line px-1.5 py-1 text-dim hover:bg-white hover:text-black" onClick={() => setParams((s) => Object.assign(s, fresh()))}>
 						reset
 					</button>
-					<button type="button" onClick={() => setBare((b) => !b)}>
+					<button type="button" class="flex-1 cursor-pointer border border-line px-1.5 py-1 text-dim hover:bg-white hover:text-black" onClick={() => setBare((b) => !b)}>
 						hide
 					</button>
 				</div>
 			</aside>
-			<Show when={error()}>{(message) => <p class="error">{message()}</p>}</Show>
+			<Show when={error()}>{(message) => <p class="fixed inset-0 m-0 grid place-items-center text-sm">{message()}</p>}</Show>
 		</div>
 	);
 }
@@ -125,9 +130,10 @@ function Slider(props: { spec: SliderSpec; value: number; set: (v: number) => vo
 	// Follows the setting, and runs ahead of it while a rebuilding slider is dragged.
 	const [draft, setDraft] = createSignal(() => props.value, { name: 'draft' });
 	return (
-		<div class="row" title={props.spec.hint}>
+		<div class="grid min-h-5.5 grid-cols-[90px_1fr_56px] items-center gap-2" title={props.spec.hint}>
 			<label>{props.spec.key}</label>
 			<input
+				class="w-full accent-white"
 				type="range"
 				min={props.spec.min}
 				max={props.spec.max}
@@ -137,7 +143,7 @@ function Slider(props: { spec: SliderSpec; value: number; set: (v: number) => vo
 				onChange={(e) => props.set(Number(e.currentTarget.value))}
 			/>
 			<input
-				class="value"
+				class="w-full border-0 border-b border-transparent bg-transparent p-0 text-right text-dim tabular-nums outline-none hover:border-line hover:text-white focus:border-line focus:text-white"
 				inputmode="decimal"
 				spellcheck="false"
 				value={String(draft())}
@@ -154,9 +160,9 @@ function Slider(props: { spec: SliderSpec; value: number; set: (v: number) => vo
 
 function Color(props: { label: string; hint: string; value: string; set: (v: string) => void }) {
 	return (
-		<div class="row" title={props.hint}>
+		<div class="grid min-h-5.5 grid-cols-[90px_1fr_56px] items-center gap-2" title={props.hint}>
 			<label>{props.label}</label>
-			<input type="color" value={props.value} onInput={(e) => props.set(e.currentTarget.value)} />
+			<input class="col-span-2 h-5 w-full border border-line bg-transparent p-0" type="color" value={props.value} onInput={(e) => props.set(e.currentTarget.value)} />
 		</div>
 	);
 }

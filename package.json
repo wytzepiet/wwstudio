@@ -21,11 +21,13 @@
 		"@solidjs/diagnostics": "^2.0.0-rc.17",
 		"@solidjs/prerender": "^0.3.0",
 		"@solidjs/vite-plugin": "^3.0.0-next.51",
+		"@tailwindcss/vite": "^4.3.3",
 		"@webgpu/types": "^0.1.74",
 		"eslint-plugin-solid": "~0.18.1",
 		"filesystem-routing": "0.4.0",
 		"oxlint": "~1.79.0",
 		"prerender-crawler": "^0.3.0",
+		"tailwindcss": "^4.3.3",
 		"typescript": "^6.0.3",
 		"vite": "^8.1.5",
 		"vite-imagetools": "^12.0.1"

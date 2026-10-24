@@ -1,10 +1,9 @@
 import { createMemo, createSignal, Repeat, useContext } from 'solid-js';
 import { Stage } from '../stage';
-import './Ticker.css';
 
 /** How many lines either side the pointer's pull reaches. */
 const REACH = 1.6;
-const SPACING = 12; // px from line to line (as in Ticker.css)
+const SPACING = 12; // px from line to line (the lines' h-3)
 
 /**
  * Where you are on the page: a short line on the right edge for each place scrolling comes to rest
@@ -29,7 +28,7 @@ export default function Ticker(props: { labels: string[] }) {
 			stage.viewport.height();
 			stage.released();
 			if (typeof document === 'undefined') return [];
-			return [...document.querySelectorAll<HTMLElement>('.home .rest, .home .boring, .home .lake')]
+			return [...document.querySelectorAll<HTMLElement>('.home [data-rest]')]
 				.map((el) => Math.round(el.getBoundingClientRect().top + scrollY))
 				.sort((a, b) => a - b);
 		},
@@ -57,7 +56,12 @@ export default function Ticker(props: { labels: string[] }) {
 
 	return (
 		<nav
-			class={['ticker', { on: stage.released(), near: near() !== null }]}
+			// On the right edge, in the middle, over everything; in once the loader has let go. It
+			// reaches out to the left a good way, so the pointer is felt coming near before it is on a line.
+			class={[
+				'fixed top-1/2 right-0 z-4 -translate-y-1/2 py-12 pr-[clamp(12px,2vw,28px)] pl-18 transition-opacity duration-800',
+				stage.released() ? 'opacity-100' : 'pointer-events-none opacity-0'
+			]}
 			aria-label="Where you are"
 			onPointerMove={(e) => {
 				if (!list) return;
@@ -65,18 +69,32 @@ export default function Ticker(props: { labels: string[] }) {
 			}}
 			onPointerLeave={() => setPointer(null)}
 		>
-			<div class="lines" ref={(el: HTMLElement) => (list = el)}>
+			<div class="grid justify-items-end" ref={(el: HTMLElement) => (list = el)}>
 				<Repeat count={props.labels.length}>
 					{(i) => (
 						<button
 							type="button"
-							class={{ at: i === at(), near: i === near() }}
+							// Each line sits in a taller target, so it is easy to hit.
+							class={[
+								'ticker-line relative block h-3 w-10 cursor-pointer focus-visible:outline focus-visible:outline-offset-2 focus-visible:outline-white/60',
+								{ at: i === at() }
+							]}
 							style={{ '--swell': swell(i) }}
 							aria-label={props.labels[i]}
 							aria-current={i === at() ? 'step' : undefined}
 							onClick={() => scrollTo({ top: stops()[i] ?? 0, behavior: 'smooth' })}
 						>
-							<span class="label">{props.labels[i]}</span>
+							{/* What the nearest line is, beside it on the left, small, with a soft dark halo so it
+							    reads over the bright flock too. */}
+							<span
+								class={[
+									'pointer-events-none absolute top-1/2 right-[calc(100%+4px)] font-mono text-[0.6875rem] leading-none font-medium tracking-[0.06em] whitespace-nowrap uppercase transition-[opacity,translate] duration-300 ease-out-soft [text-shadow:0_0_10px_rgb(0_2_15/0.9),0_0_3px_rgb(0_2_15/0.9)] motion-reduce:transition-none',
+									i === near() ? '-translate-y-1/2 opacity-100' : 'translate-x-1.5 -translate-y-1/2 opacity-0',
+									i === at() ? 'text-white' : 'text-white/75'
+								]}
+							>
+								{props.labels[i]}
+							</span>
 						</button>
 					)}
 				</Repeat>

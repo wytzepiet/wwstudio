@@ -2,7 +2,6 @@ import { createSignal, onSettled, useContext } from 'solid-js';
 import { startBoids } from '../boids/app';
 import { EMAIL } from '../contact';
 import { Stage } from '../stage';
-import './Flock.css';
 
 const FILL = 2600; // ms for the ring to fill, if the page is ready by then
 const WAIT = 0.9; // where it waits until the page is
@@ -105,12 +104,21 @@ export default function Flock() {
 	return (
 		<>
 			<canvas
-				class={['flock', { off: failed() }]}
+				// Above the planes behind the flock, under those in front of it, and never in the pointer's
+				// way. (Not below zero: the page's body would then stand in front of what lies behind it.)
+				class={['pointer-events-none fixed inset-0 z-1 block size-full', { hidden: failed() }]}
 				aria-hidden="true"
 				ref={canvas}
 				style={descent.inside() ? { 'clip-path': descent.clip(), opacity: descent.birds() } : undefined}
 			/>
-			<p class={['percent', { gone: gone() }]} aria-hidden="true">
+			{/* In the middle of the ring, which is in the middle of the screen. */}
+			<p
+				class={[
+					'pointer-events-none fixed inset-0 m-0 grid place-items-center font-mono text-sm leading-none font-medium tracking-[0.08em] text-white/80 tabular-nums transition-opacity duration-400',
+					{ 'opacity-0': gone() }
+				]}
+				aria-hidden="true"
+			>
 				{percent()}
 			</p>
 		</>

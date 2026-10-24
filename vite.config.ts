@@ -3,6 +3,7 @@ import solid from '@solidjs/vite-plugin';
 import { fileRoutes } from 'filesystem-routing/vite';
 import { prerender } from 'prerender-crawler/vite';
 import { imagetools } from 'vite-imagetools';
+import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig({
 	// Start mode: no index.html and no entry files. The plugin builds the app around src/App.tsx
@@ -13,6 +14,7 @@ export default defineConfig({
 		solid({ start: true, ssr: true, diagnostics: true, extensions: ['.jsx', '.tsx'] }),
 		fileRoutes({ types: true }),
 		imagetools(),
+		tailwindcss(),
 		// Nothing links to /dusk and /sandbox (they are for working on the scene and the flock), so
 		// they are named here.
 		prerender({ mode: 'static', pages: ['/', '/dusk', '/sandbox'] })

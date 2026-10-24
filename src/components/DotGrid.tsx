@@ -1,5 +1,4 @@
 import { onSettled } from 'solid-js';
-import './DotGrid.css';
 
 /**
  * The dot grid of Fuse's own site (solid-fuse/packages/docs/components/home/dot-grid.tsx): a canvas
@@ -64,5 +63,5 @@ export default function DotGrid(props: {
 		observer.observe(parent);
 		return () => observer.disconnect();
 	});
-	return <canvas class="dot-grid" ref={canvas} />;
+	return <canvas class="pointer-events-none absolute inset-0 size-full" ref={canvas} />;
 }

@@ -6,7 +6,6 @@ import { EMAIL } from '../contact';
 import { PALETTE, palettes } from '../dusk/palettes';
 import { box, placement } from '../dusk/placement';
 import type { Scene } from '../stage';
-import './dusk.css';
 
 const ink = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255) as [number, number, number];
 
@@ -67,18 +66,19 @@ export default function DuskPage() {
 	const rect = () => scene()?.emailRect() ?? null;
 
 	const range = (label: string, min: number, max: number, step: number, value: number, set: (v: number) => void) => (
-		<label>
-			{label} <input type="range" min={min} max={max} step={step} value={value} onInput={(e) => set(Number(e.currentTarget.value))} />
+		<label class="grid grid-cols-[100px_160px] items-center">
+			{label} <input class="accent-white" type="range" min={min} max={max} step={step} value={value} onInput={(e) => set(Number(e.currentTarget.value))} />
 		</label>
 	);
 
 	return (
-		<div class="dusk-page">
+		<div class="locked font-mono text-[11px] leading-snug">
 			<Title>Dusk</Title>
-			<canvas class="scene" ref={duskCanvas} />
-			<canvas class="birds" ref={flockCanvas} />
+			<canvas class="fixed inset-0 block h-screen w-screen" ref={duskCanvas} />
+			<canvas class="pointer-events-none fixed inset-0 block h-screen w-screen" ref={flockCanvas} />
 			<a
-				class="email"
+				// Clickable and readable, but the scene draws it: the link itself is invisible.
+				class="fixed overflow-hidden whitespace-nowrap text-transparent focus-visible:outline focus-visible:outline-offset-4 focus-visible:outline-white/60"
 				href={`mailto:${EMAIL}`}
 				style={
 					rect()
@@ -94,21 +94,21 @@ export default function DuskPage() {
 			>
 				{EMAIL}
 			</a>
-			<aside>
+			<aside class="fixed right-4 bottom-4 grid gap-1.5 border border-white/15 bg-black/60 p-2.5">
 				{range('sun azimuth', -60, 60, 0.5, 18, setAzimuth)}
 				{range('sun elevation', -6, 6, 0.1, -1.2, setElevation)}
-				<label>
+				<label class="grid grid-cols-[100px_160px] items-center">
 					palette{' '}
-					<select onChange={(e) => setPalette(palettes[e.currentTarget.value])}>
+					<select class="border border-white/20 bg-black px-1.5 py-0.5 text-inherit" onChange={(e) => setPalette(palettes[e.currentTarget.value])}>
 						<For each={Object.keys(palettes)}>{(name) => <option value={name}>{name}</option>}</For>
 					</select>
 				</label>
-				<button type="button" onClick={() => scene()?.surface()}>
+				<button type="button" class="cursor-pointer border border-white/20 px-1.5 py-0.75" onClick={() => scene()?.surface()}>
 					surface
 				</button>
 				{range('exposure', 0.3, 2, 0.05, 1, setExposure)}
 			</aside>
-			<Show when={error()}>{(message) => <p class="error">{message()}</p>}</Show>
+			<Show when={error()}>{(message) => <p class="fixed inset-0 m-0 grid place-items-center">{message()}</p>}</Show>
 		</div>
 	);
 }

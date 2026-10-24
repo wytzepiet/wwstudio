@@ -1,7 +1,6 @@
 import { createMemo, createSignal, For, onSettled, Show, useContext } from 'solid-js';
 import { createClock } from '../lib/frame';
 import { Stage } from '../stage';
-import './Headline.css';
 
 const AFTER_BURST = 1200; // ms after the loader bursts before the first letter
 const UNPROMPTED = 8000; // ms after which it plays anyway, if there is no loader to wait for
@@ -60,23 +59,23 @@ export default function Headline(props: { lines: [string, string] }) {
 	const shuffle = () => Math.floor(t() / SHUFFLE_EVERY);
 
 	return (
-		<h1 class={['headline', { done: done() }]} aria-label={props.lines.join(' ')}>
-			<span class="line" aria-hidden="true">
+		<h1 class={['headline m-0 text-[clamp(2.5rem,7vw,7rem)] leading-[0.95] font-extrabold tracking-[-0.04em]', { done: done() }]} aria-label={props.lines.join(' ')}>
+			<span class="relative block" aria-hidden="true">
 				<For each={typed()} keyed={false}>
-					{(ch, i) => <span class={['ch', { on: i < shown(), caret: !done() && i === shown() - 1 && shown() < typed().length }]}>{ch()}</span>}
+					{(ch, i) => <span class={['ch relative', { on: i < shown(), caret: !done() && i === shown() - 1 && shown() < typed().length }]}>{ch()}</span>}
 				</For>
 			</span>
-			<span class="line" aria-hidden="true">
+			<span class="relative block" aria-hidden="true">
 				<For each={worked()} keyed={false}>
-					{(w) => <span class={['ch', { on: t2() >= w().appear, scrambling: !done() && !w().blank && t2() < w().settle }]}>{w().ch}</span>}
+					{(w) => <span class={['ch relative', { on: t2() >= w().appear, 'text-transparent': !done() && !w().blank && t2() < w().settle }]}>{w().ch}</span>}
 				</For>
 				{/* The noise is drawn on a copy of the line laid over it, see-through as a whole, so
 				    where two glyphs overlap they don't add up. */}
 				<Show when={!done()}>
-					<span class="noise">
+					<span class="noise pointer-events-none absolute inset-0">
 						<For each={worked()} keyed={false}>
 							{(w, i) => (
-								<span class="ch" data-glyph={t2() >= w().appear && !w().blank && t2() < w().settle ? GLYPHS[Math.floor(hash(i, shuffle()) * GLYPHS.length)] : undefined}>
+								<span class="ch on relative text-transparent" data-glyph={t2() >= w().appear && !w().blank && t2() < w().settle ? GLYPHS[Math.floor(hash(i, shuffle()) * GLYPHS.length)] : undefined}>
 									{w().ch}
 								</span>
 							)}

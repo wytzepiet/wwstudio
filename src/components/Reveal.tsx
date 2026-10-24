@@ -1,7 +1,6 @@
 import { createMemo, For } from 'solid-js';
-import { dynamic } from '@solidjs/web';
+import { dynamic, type JSX } from '@solidjs/web';
 import { createInView } from '../lib/viewport';
-import './Reveal.css';
 
 const STAGGER = 40;
 
@@ -11,7 +10,7 @@ const STAGGER = 40;
  * drifting up. Without `in` it comes in as it scrolls into view and goes once it has gone.
  * Newlines in the text are kept as line breaks; a word stays whole on its line.
  */
-export default function Reveal(props: { text: string; letters?: boolean; in?: boolean; out?: boolean; as?: string; class?: string }) {
+export default function Reveal(props: { text: string; letters?: boolean; in?: boolean; out?: boolean; as?: string; class?: JSX.ClassValue }) {
 	const parts = createMemo(() => {
 		let i = 0;
 		const lines = props.text
