@@ -171,7 +171,7 @@ export async function startBoids(
 	// or a spring's long creep. About a second all told. Past it, the camera keeps up with the scroll
 	// closely.
 	const ACCEL = 2.5;
-	const LAND = 3;
+	const LAND = 2.2;
 	let travel = 0;
 	let travelSpeed = 0;
 
