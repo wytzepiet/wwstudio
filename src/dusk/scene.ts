@@ -4,6 +4,7 @@ import {
 	createFreeCamera,
 	createMeshFromData,
 	createSceneContext,
+	disposeEngine,
 	createShaderMaterial,
 	createSphere,
 	createTexture2DFromExternalImage,
@@ -27,6 +28,7 @@ import waterCode from './shaders/water.wgsl?raw';
 import shoreCode from './shaders/shore.wgsl?raw';
 import labelCode from './shaders/label.wgsl?raw';
 import sceneryCode from './shaders/scenery.wgsl?raw';
+import { createSignal } from 'solid-js';
 import { mat4, vec3 as v3 } from 'wgpu-matrix';
 import { PALETTE, stopsUniforms, type Stop } from './palettes';
 import { EYE, TARGET, FOV } from './placement';
@@ -35,17 +37,40 @@ export { placement, box } from './placement';
 
 type Vec3 = [number, number, number] | Float32Array;
 
-/** What can be changed while it runs. */
+/** A value the scene reads every frame: a getter (a signal, say), or a value that holds. */
+type Input<T> = T | (() => T);
+const read = <T>(input: Input<T>): T => (typeof input === 'function' ? (input as () => T)() : input);
+
+/** What the scene is told. All but the email are read every frame, so it follows whoever drives it. */
 export interface Dusk {
-	/** Where the sun is: degrees round from straight ahead (positive right), and above the horizon. */
-	sun: { azimuth: number; elevation: number };
-	exposure: number;
-	/** How bright the stars are, apart from the exposure: they can be out while all else is black. */
-	stars: number;
-	/** The sky's colours (see palettes.ts); the default if not given. */
-	palette?: Stop[];
-	/** What rises out of the water: the email. */
+	/** What rises out of the water. */
 	email: string;
+	/** Where the sun is: degrees round from straight ahead (positive right), and above the horizon. */
+	sun?: Input<{ azimuth: number; elevation: number }>;
+	exposure?: Input<number>;
+	/** How bright the stars are, apart from the exposure: they can be out while all else is black. */
+	stars?: Input<number>;
+	/** The sky's colours (see palettes.ts). */
+	palette?: Input<Stop[]>;
+	/** Where the camera is: from eye, looking at target. On the dike, by default. */
+	camera?: Input<{ eye: Vec3; target: Vec3 }>;
+	/** Whether it draws at all (stopped, it costs nothing). */
+	running?: Input<boolean>;
+	/** Whether the email is up: it rises when this turns true, and sinks back at once when false. */
+	up?: Input<boolean>;
+	/** The flock's mirror image (see boids/app), for the water, and how it reads it: the flock's
+	 *  gain, and the colour of its ink. */
+	reflection?: Input<GPUTexture | null | undefined>;
+	ink?: Input<{ gain: number; color: Vec3 }>;
+}
+
+/** Where the email is on screen, in CSS pixels of the canvas, and whether any of it is up. */
+export interface EmailRect {
+	left: number;
+	top: number;
+	width: number;
+	height: number;
+	visible: boolean;
 }
 
 /** The email's board: its plane LABEL_Z out, LABEL_W wide, its letters LABEL_H tall, in metres. Each
@@ -88,8 +113,12 @@ const SHORE_Z = -700;
  * the sky for the flock.
  */
 export async function startDusk(canvas: HTMLCanvasElement, settings: Dusk, { paused = false } = {}) {
+	const { sun: sunInput = { azimuth: 18, elevation: -1.2 }, exposure = 1, stars = 1, palette: paletteInput = PALETTE } = settings;
+	const { camera: cameraInput = { eye: EYE, target: TARGET }, running: runningInput = true, up: upInput, reflection, ink } = settings;
 	const engine = await createEngine(canvas, { maxDevicePixelRatio: 2, msaaSamples: 4 });
 	const scene = createSceneContext(engine);
+	const device = (engine as unknown as { _device: GPUDevice })._device;
+	const sampler = device.createSampler({ magFilter: 'linear', minFilter: 'linear', addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge' });
 	scene.clearColor = { r: 0, g: 0, b: 0, a: 1 };
 
 	const camera = createFreeCamera(vec3(...EYE), vec3(...TARGET));
@@ -261,11 +290,11 @@ export async function startDusk(canvas: HTMLCanvasElement, settings: Dusk, { pau
 	edges[0] = 0; // the first letter's cut reaches the board's edge
 	// How high each letter floats: lower by a little of a dot, and tall ones lower still.
 	const metres = (px: number) => (px / text.height) * LABEL_H;
-	const ink = (s: string) => ctx.measureText(s);
-	const dot = ink('.');
-	const xHeight = ink('x').actualBoundingBoxAscent;
+	const measure = (s: string) => ctx.measureText(s);
+	const dot = measure('.');
+	const xHeight = measure('x').actualBoundingBoxAscent;
 	const floats = email.map(
-		(c) => FLOAT - DOT_SINK * metres(dot.actualBoundingBoxAscent + dot.actualBoundingBoxDescent) - TALL_SINK * metres(Math.max(ink(c).actualBoundingBoxAscent - xHeight, 0))
+		(c) => FLOAT - DOT_SINK * metres(dot.actualBoundingBoxAscent + dot.actualBoundingBoxDescent) - TALL_SINK * metres(Math.max(measure(c).actualBoundingBoxAscent - xHeight, 0))
 	);
 	// Each letter comes up turned a little, one way or the other, rights itself and then rocks.
 	const random = (x: number) => (((Math.sin(x) * 43758.5453) % 1) + 1) % 1;
@@ -292,17 +321,19 @@ export async function startDusk(canvas: HTMLCanvasElement, settings: Dusk, { pau
 	board.material = labelMaterial;
 	addToScene(scene, board);
 
-	// Where the camera is (it can be moved: see look).
+	// Where the camera is (see `camera`).
 	const eye = v3.clone(EYE);
 	const target = v3.clone(TARGET);
 
 	// The pointer, in CSS pixels of the canvas, for the dock.
 	const pointer = { x: 0, y: 0, on: false };
-	addEventListener('pointermove', (e) => {
+	const move = (e: PointerEvent) => {
 		const r = canvas.getBoundingClientRect();
 		Object.assign(pointer, { x: e.clientX - r.left, y: e.clientY - r.top, on: true });
-	});
-	document.documentElement.addEventListener('pointerleave', () => (pointer.on = false));
+	};
+	const leave = () => (pointer.on = false);
+	addEventListener('pointermove', move);
+	document.documentElement.addEventListener('pointerleave', leave);
 	const lifts = new Array(16).fill(0);
 	const liftSpeeds = new Array(16).fill(0);
 
@@ -317,9 +348,25 @@ export async function startDusk(canvas: HTMLCanvasElement, settings: Dusk, { pau
 	let last = 0;
 	// The night drifts a little with the pointer (see the sky's `drift`), slowly following it.
 	const drift = [0, 0];
+	let mirrored: GPUTexture | null = null;
 	onBeforeRender(scene, () => {
 		const now = (performance.now() - start) / 1000;
-		const palette = stopsUniforms(settings.palette ?? PALETTE);
+		const view = read(cameraInput);
+		v3.copy(view.eye, eye);
+		v3.copy(view.target, target);
+		camera.position.set(eye[0], eye[1], eye[2]);
+		camera.target.set(target[0], target[1], target[2]);
+		const texture = reflection ? read(reflection) : null;
+		if (texture && texture !== mirrored) {
+			mirrored = texture;
+			setShaderTexture(waterMaterial, 'reflection', { texture, view: texture.createView(), sampler, width: texture.width, height: texture.height } as Texture2D);
+		}
+		if (ink) {
+			const { gain, color } = read(ink);
+			setShaderFloat(waterMaterial, 'flockGain', gain);
+			setShaderVector3(waterMaterial, 'inkColor', [color[0], color[1], color[2]]);
+		}
+		const palette = stopsUniforms(read(paletteInput));
 		const dt = Math.min(Math.max(now - last, 0), 1 / 20);
 		last = now;
 		const toward = pointer.on ? [(pointer.x / canvas.clientWidth) * 2 - 1, 1 - (pointer.y / canvas.clientHeight) * 2] : [0, 0];
@@ -360,14 +407,15 @@ export async function startDusk(canvas: HTMLCanvasElement, settings: Dusk, { pau
 				if (was + LABEL_H < 0 && rises[i] + LABEL_H >= 0) ringsAt[i] = now + RING_DELAY;
 			});
 		}
-		const az = (settings.sun.azimuth * Math.PI) / 180;
-		const el = (settings.sun.elevation * Math.PI) / 180;
+		const at = read(sunInput);
+		const az = (at.azimuth * Math.PI) / 180;
+		const el = (at.elevation * Math.PI) / 180;
 		const sun: [number, number, number] = [Math.sin(az) * Math.cos(el), Math.sin(el), -Math.cos(az) * Math.cos(el)];
 		for (const m of materials) {
 			setShaderVector3(m, 'sunDir', sun);
 			setShaderFloat(m, 'time', now);
-			setShaderFloat(m, 'exposure', settings.exposure);
-			setShaderFloat(m, 'stars', settings.stars);
+			setShaderFloat(m, 'exposure', read(exposure));
+			setShaderFloat(m, 'stars', read(stars));
 			setShaderUniform(m, 'drift', drift);
 			palette.forEach((stops, i) => setShaderUniform(m, `skyStops${i}`, stops));
 			setShaderUniform(m, 'label', [LABEL_Z, hw, LABEL_H, email.length]);
@@ -390,63 +438,68 @@ export async function startDusk(canvas: HTMLCanvasElement, settings: Dusk, { pau
 		running = false;
 	}
 
-	const device = (engine as unknown as { _device: GPUDevice })._device;
-	const sampler = device.createSampler({ magFilter: 'linear', minFilter: 'linear', addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge' });
-	return {
-		/** The GPU device the scene draws with, for the flock to share. */
-		device,
-		/** Mirror this texture (the flock's reflection, see boids/app) in the water. */
-		reflect(texture: GPUTexture) {
-			const wrapped: Texture2D = { texture, view: texture.createView(), sampler, width: texture.width, height: texture.height };
-			setShaderTexture(waterMaterial, 'reflection', wrapped);
-		},
-		/** What it was started with, read every frame: change it to change the scene. */
-		settings,
-		/** Draw, or stop drawing (paused, it costs nothing). */
-		run(on: boolean) {
-			if (on === running) return;
+	// The email rises when told to and sinks when not; drawing starts and stops when told to; and
+	// where the email is on screen is told back. Read every frame, running or not.
+	const sink = () => {
+		risenAt = null;
+		lifts.fill(0);
+		liftSpeeds.fill(0);
+		rises.fill(SUNK);
+		ringsAt.fill(-1000);
+	};
+	const surface = () => {
+		risenAt = (performance.now() - start) / 1000;
+		rises.fill(SUNK);
+		ringsAt.fill(-1000);
+	};
+	const [emailRect, setEmailRect] = createSignal<EmailRect | null>(null, { name: 'emailRect' });
+	let wasUp = false;
+	let watching = requestAnimationFrame(function watch() {
+		const on = read(runningInput);
+		if (on !== running) {
 			running = on;
 			if (on) startEngine(engine);
 			else stopEngine(engine);
-		},
-		/** Move the camera: from eye, looking at target. */
-		look(from: [number, number, number], at: [number, number, number]) {
-			v3.copy(from, eye);
-			v3.copy(at, target);
-			camera.position.set(...from);
-			camera.target.set(...at);
-		},
-		/** Sink the email back under the water, at once. */
-		sink() {
-			risenAt = null;
-			lifts.fill(0);
-			liftSpeeds.fill(0);
-			rises.fill(SUNK);
-			ringsAt.fill(-1000);
-		},
-		/** Let the email rise out of the water (again). */
-		surface() {
-			risenAt = (performance.now() - start) / 1000;
-			rises.fill(SUNK);
-			ringsAt.fill(-1000);
-		},
-		/** Where the email is on screen, in CSS pixels of a canvas this big, seen from where the
-		 *  camera is (or from `from`, looking at `to`). */
-		emailRect(width: number, height: number, from: Vec3 = eye, to: Vec3 = target) {
-			const view = mat4.lookAt(from, to, [0, 1, 0]);
-			const project = mat4.multiply(mat4.perspective(FOV, width / height, 0.1, 5000), view);
-			const at = (x: number, y: number) => {
-				const p = v3.transformMat4([x, y, LABEL_Z], project);
-				return [((p[0] + 1) / 2) * width, ((1 - p[1]) / 2) * height];
-			};
-			const [x0, y0] = at(-hw, FLOAT + LABEL_H);
-			const [x1, y1] = at(hw, FLOAT);
-			return { left: x0, top: y0, width: x1 - x0, height: y1 - y0, visible: rises.some((r) => r + LABEL_H > 0) };
-		},
-		/** How the water reads it: the flock's gain, and the colour of its ink. */
-		ink(gain: number, color: [number, number, number]) {
-			setShaderFloat(waterMaterial, 'flockGain', gain);
-			setShaderVector3(waterMaterial, 'inkColor', color);
+		}
+		if (upInput !== undefined) {
+			const up = read(upInput);
+			if (up && !wasUp) surface();
+			if (!up && wasUp) sink();
+			wasUp = up;
+		}
+		setEmailRect((was) => {
+			const next = placeEmail(read(cameraInput));
+			return was && Object.keys(next).every((k) => was[k as keyof EmailRect] === next[k as keyof EmailRect]) ? was : next;
+		});
+		watching = requestAnimationFrame(watch);
+	});
+	/** Where the email is on screen, seen from the camera. */
+	const placeEmail = (view: { eye: Vec3; target: Vec3 }): EmailRect => {
+		const [width, height] = [canvas.clientWidth, canvas.clientHeight];
+		const project = mat4.multiply(mat4.perspective(FOV, width / height, 0.1, 5000), mat4.lookAt(view.eye, view.target, [0, 1, 0]));
+		const at = (x: number, y: number) => {
+			const p = v3.transformMat4([x, y, LABEL_Z], project);
+			return [Math.round(((p[0] + 1) / 2) * width), Math.round(((1 - p[1]) / 2) * height)];
+		};
+		const [x0, y0] = at(-hw, FLOAT + LABEL_H);
+		const [x1, y1] = at(hw, FLOAT);
+		return { left: x0, top: y0, width: x1 - x0, height: y1 - y0, visible: rises.some((r) => r + LABEL_H > 0) };
+	};
+
+	return {
+		/** The GPU device the scene draws with, for the flock to share. */
+		device,
+		/** Where the email is on screen (a signal). */
+		emailRect,
+		/** Let the email rise out of the water (again), whatever `up` says. */
+		surface,
+		/** Stops it and lets go of the GPU. */
+		dispose() {
+			cancelAnimationFrame(watching);
+			removeEventListener('pointermove', move);
+			document.documentElement.removeEventListener('pointerleave', leave);
+			stopEngine(engine);
+			disposeEngine(engine);
 		}
 	};
 }

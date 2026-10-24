@@ -1,4 +1,4 @@
-import { createEffect, createSignal, onSettled, useContext } from 'solid-js';
+import { createSignal, onSettled, useContext } from 'solid-js';
 import { startBoids } from '../boids/app';
 import { EMAIL } from '../contact';
 import { Stage } from '../stage';
@@ -16,9 +16,10 @@ const RESUME_KEY = 'dev:scroll';
  * loader: a ring that fills to 100% and bursts into the flock. Without WebGPU there is no flock and
  * no loader, and the page is let go at once.
  *
- * It starts the engines and hands them to the stage: first the dusk scene of the page's end (paused,
- * on the canvas <Ending> left), so the flock can run on its GPU device, fly into that scene and be
- * mirrored in its lake; then the flock. Scrolling flies the flock's camera (see `travel`).
+ * It starts the engines, tells them where to read what drives them (the scroll, and the way down
+ * into the dusk, see descent.ts), and hands them to the stage: first the dusk scene of the page's
+ * end (paused, on the canvas <Ending> left), so the flock can run on its GPU device, fly into that
+ * scene and be mirrored in its lake; then the flock.
  */
 export default function Flock() {
 	const stage = useContext(Stage);
@@ -27,24 +28,14 @@ export default function Flock() {
 	const [failed, setFailed] = createSignal(false, { name: 'noFlock' });
 	let canvas!: HTMLCanvasElement;
 
-	// Scrolling flies the camera, once the loader has let go.
-	createEffect(
-		() => {
-			const flock = stage.flock();
-			return stage.released() && flock ? { flock, travel: stage.travel() } : null;
-		},
-		(fly) => {
-			fly?.flock.travel(fly.travel);
-		},
-		{ name: 'fly' }
-	);
-
 	onSettled(() => {
 		// The page always opens at the hero, where the loader plays, not where a reload left it.
 		history.scrollRestoration = 'manual';
 		const resume = import.meta.env.DEV ? Number(sessionStorage.getItem(RESUME_KEY) ?? NaN) : NaN;
 		const resuming = Number.isFinite(resume);
 		let frame = 0;
+		let disposed = false;
+		const engines: { dispose(): void }[] = [];
 		const release = () => {
 			setGone(true);
 			// Whatever a reload tried, it starts at the hero (or, developing, where it was).
@@ -56,18 +47,24 @@ export default function Flock() {
 
 		(async () => {
 			const duskCanvas = stage.el.dusk;
+			const { descent } = stage;
 			const dusk = duskCanvas
 				? await import('../dusk/scene')
-						.then(({ startDusk }) => startDusk(duskCanvas, { sun: { azimuth: 18, elevation: -1.2 }, exposure: 0, stars: 0, email: EMAIL }, { paused: true }))
+						.then(({ startDusk }) => startDusk(duskCanvas, { email: EMAIL, ...descent.scene }, { paused: true }))
 						.catch((e) => (console.error(e), null))
 				: null;
-			stage.set.dusk(dusk);
-			const flock = await startBoids(canvas, stage.params, {
+			if (dusk) engines.push(dusk);
+			const flock = await startBoids(canvas, descent.flock.params, {
 				held: !resuming,
-				onFlown: stage.set.drawn,
+				// Scrolling flies the camera, once the loader has let go.
+				travel: () => (stage.released() ? stage.travel() : 0),
+				placed: descent.flock.placed,
 				device: dusk?.device,
-				onReflection: dusk?.reflect
+				reflect: !!dusk
 			});
+			engines.push(flock);
+			if (disposed) return engines.forEach((e) => e.dispose());
+			stage.set.dusk(dusk);
 			stage.set.flock(flock);
 			if (resuming) return release();
 
@@ -97,7 +94,11 @@ export default function Flock() {
 			setFailed(true);
 			release();
 		});
-		return () => cancelAnimationFrame(frame);
+		return () => {
+			disposed = true;
+			cancelAnimationFrame(frame);
+			engines.forEach((e) => e.dispose());
+		};
 	});
 
 	const { descent } = stage;

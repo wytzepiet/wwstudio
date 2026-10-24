@@ -1,23 +1,11 @@
+import { createSignal } from 'solid-js';
 import { mat4, vec3 } from 'wgpu-matrix';
 import { Flock } from './flock';
 import { Renderer } from './renderer';
 import { GpuTimer } from './timer';
 import { PAST, type Params } from './params';
 
-/**
- * The loader: `gather` draws the flock into the ring, `progress` fills it (0 to 1; the ring spins
- * once full), `release` lets it burst out. `travel` flies the camera forward through the flock and
- * past it: 0 in front, 1 at PAST beyond its middle, and on at that rate (see `flight` in params).
- */
-export interface FlockControl {
-	gather(): void;
-	progress(p: number): void;
-	release(): void;
-	travel(t: number): void;
-	/** Set it into a scene from now on (see Placement), or take it out again with null. The
-	 *  placement is read every frame, so its camera can be moved by changing it. */
-	place(p: Placement | null): void;
-}
+export type FlockControl = Awaited<ReturnType<typeof startBoids>>;
 
 export interface Stats {
 	fps: number;
@@ -48,35 +36,40 @@ const hexColor = (hex: string, intensity: number): [number, number, number, numb
 	return [r, g, b, intensity];
 };
 
+/** A value the flock reads every frame: a getter (a signal, say), or a value that holds. */
+type Input<T> = T | (() => T);
+const read = <T>(input: Input<T>): T => (typeof input === 'function' ? (input as () => T)() : input);
+
 /**
- * Runs the flock on `canvas` until the page goes away. Params are read live every frame, so whoever
- * holds them can change them. With `held`, it starts as the loader ring. Throws if the browser has
- * no WebGPU.
+ * Runs the flock on `canvas` until disposed. What it is told it reads every frame, so it follows
+ * whoever drives it: its settings (`params`), how far to fly (`travel`: 0 in front of the flock, 1
+ * at PAST beyond its middle, and on at that rate, see `flight` in params), and whether it is set into
+ * a scene (`placed`). What it knows it gives back as signals. The loader is driven by commands:
+ * `gather` draws the flock into the ring, `progress` fills it (0 to 1; the ring spins once full),
+ * `release` lets it burst out. With `held`, it starts as the ring. Throws if there is no WebGPU.
  */
 export async function startBoids(
 	canvas: HTMLCanvasElement,
-	params: Params,
+	input: Input<Params>,
 	{
 		held = false,
-		onStats,
-		onFlown,
-		placed: placement = null,
+		travel: travelInput = 0,
+		placed: placedInput = null,
 		device: shared,
-		onReflection
+		reflect = false
 	}: {
 		held?: boolean;
+		travel?: Input<number>;
+		/** Set into a scene instead of on its own: its camera, place and water. */
+		placed?: Input<Placement | null>;
 		/** Run on this device rather than one of its own: the scene's, so they can share textures. */
 		device?: GPUDevice;
-		/** Placed, the flock's mirror image in the water is drawn into a texture (rather than on its
-		 *  canvas), for the scene's water to sample, rippled. Called whenever that texture is new. */
-		onReflection?: (texture: GPUTexture) => void;
-		/** Set into a scene instead of on its own: its camera, place and water. */
-		placed?: Placement | null;
-		onStats?: (s: Stats) => void;
-		/** Every frame: how far the camera has flown toward and past the flock, in world units. */
-		onFlown?: (flown: number) => void;
+		/** Placed, draw the flock's mirror image into a texture (`reflection`) rather than on its
+		 *  canvas, for the scene's water to sample, rippled. */
+		reflect?: boolean;
 	} = {}
-): Promise<FlockControl> {
+) {
+	let params = read(input);
 	if (!navigator.gpu) throw new Error('WebGPU is not available in this browser.');
 	let device = shared;
 	if (!device) {
@@ -107,11 +100,16 @@ export async function startBoids(
 		size = [w, h];
 		canvas.width = w;
 		canvas.height = h;
-		renderer.resize(w, h, !!onReflection);
-		if (onReflection) onReflection(renderer.reflection!);
+		renderer.resize(w, h, reflect);
+		if (reflect) setReflection(renderer.reflection);
 	};
 	let size = [0, 0];
-	new ResizeObserver(resize).observe(canvas);
+	// What it gives back.
+	const [reflection, setReflection] = createSignal<GPUTexture | null>(null, { name: 'reflection' });
+	const [flown, setFlown] = createSignal(0, { name: 'flown' });
+	const [stats, setStats] = createSignal<Stats | null>(null, { name: 'stats' });
+	const watcher = new ResizeObserver(resize);
+	watcher.observe(canvas);
 	resize();
 
 	// Pointer, in normalized device coordinates. `look` trails it for a slow camera parallax.
@@ -120,14 +118,16 @@ export async function startBoids(
 	const lastPointer = { x: 0, y: 0 };
 	const pointerVel: [number, number] = [0, 0];
 	// On the window, not the canvas: on a page the canvas lies behind the content.
-	window.addEventListener('pointermove', (e) => {
+	const move = (e: PointerEvent) => {
 		const r = canvas.getBoundingClientRect();
 		pointer.x = ((e.clientX - r.left) / r.width) * 2 - 1;
 		pointer.y = 1 - ((e.clientY - r.top) / r.height) * 2;
 		if (!pointer.on) Object.assign(lastPointer, { x: pointer.x, y: pointer.y });
 		pointer.on = true;
-	});
-	document.documentElement.addEventListener('pointerleave', () => (pointer.on = false));
+	};
+	const leave = () => (pointer.on = false);
+	window.addEventListener('pointermove', move);
+	document.documentElement.addEventListener('pointerleave', leave);
 
 	// A goal the flock seeks, hopping around a circle every few seconds, as on the old site.
 	const goal = vec3.create(0, 0, 0);
@@ -164,7 +164,6 @@ export async function startBoids(
 	// spring (critically damped, FOLLOW its rate): however quick the page snaps there, it eases in and
 	// out and takes about 4 / FOLLOW seconds. Past it, the camera keeps up with the scroll closely.
 	const FOLLOW = 2;
-	let travelTo = 0;
 	let travel = 0;
 	let travelSpeed = 0;
 
@@ -175,7 +174,9 @@ export async function startBoids(
 	let simTime = 0;
 
 	const loop = (now: number) => {
-		const placed = placement;
+		params = read(input);
+		const placed = read(placedInput);
+		const travelTo = Math.max(read(travelInput), 0);
 		resize();
 		const dt = Math.min((now - last) / 1000, 1 / 30);
 		last = now;
@@ -225,7 +226,7 @@ export async function startBoids(
 			travelSpeed = dt > 0 ? (travel - was) / dt : 0;
 		}
 		const traveled = travel * (params.distance + PAST);
-		onFlown?.(traveled);
+		setFlown(traveled);
 		let camPos, viewMat, fov, flown;
 		if (placed) {
 			// The scene's camera, in the flock's own units.
@@ -299,7 +300,7 @@ export async function startBoids(
 			encoder,
 			context.getCurrentTexture().createView(),
 			flock.boids,
-			placed && params.mirror > 0 && !onReflection ? flock.count * 2 : flock.count,
+			placed && params.mirror > 0 && !reflect ? flock.count * 2 : flock.count,
 			{
 				viewProj,
 				camPos,
@@ -341,25 +342,39 @@ export async function startBoids(
 		timer?.read();
 
 		burst = 0;
-		if (onStats && frame % 10 === 0) {
-			onStats({ fps, gpu: timer?.ms ?? null, count: flock.count, cells: flock.cells, dims: flock.dims });
+		if (frame % 10 === 0) {
+			setStats({ fps, gpu: timer?.ms ?? null, count: flock.count, cells: flock.cells, dims: flock.dims });
 		}
 		frame++;
-		requestAnimationFrame(loop);
+		frameId = requestAnimationFrame(loop);
 	};
-	requestAnimationFrame(loop);
+	let frameId = requestAnimationFrame(loop);
 
 	return {
-		gather: () => (holdTo = 1),
-		travel: (t) => (travelTo = Math.max(t, 0)),
-		progress: (p) => {
+		/** How far the camera has flown toward and past the flock, in world units. */
+		flown,
+		/** The flock's mirror image (with `reflect`), new whenever the canvas changes size. */
+		reflection,
+		/** Frames a second, GPU time per pass and the like, a few times a second. */
+		stats,
+		gather: () => {
+			holdTo = 1;
+		},
+		progress: (p: number) => {
 			progress = Math.min(Math.max(p, 0), 1);
 			if (progress < 1) ringAngle = 0;
 		},
-		place: (p) => (placement = p),
 		release: () => {
 			if (holdTo === 0 || tensing !== null) return;
 			tensing = performance.now();
+		},
+		/** Stops it and lets go of what it holds on the GPU. */
+		dispose: () => {
+			cancelAnimationFrame(frameId);
+			watcher.disconnect();
+			window.removeEventListener('pointermove', move);
+			document.documentElement.removeEventListener('pointerleave', leave);
+			flock.destroy();
 		}
 	};
 }

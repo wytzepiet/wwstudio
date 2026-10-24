@@ -1,4 +1,4 @@
-import { createEffect, createMemo } from 'solid-js';
+import { createMemo } from 'solid-js';
 import { box, placement } from './dusk/placement';
 import { createSpring } from './lib/spring';
 import type { StageBase } from './stage';
@@ -35,16 +35,13 @@ type Vec3 = [number, number, number];
  * the lake flattens to a strip, the shore rises to the horizon, and the flock ends up overhead.
  * Down, the email rises out of the water.
  *
- * All of it is derived from where the page is scrolled to; the effects only hand it to the engines.
+ * All of it is derived from where the page is scrolled to, and handed to the engines as getters
+ * they read every frame (`scene`, `flock`).
  */
 export function createDescent(stage: StageBase) {
 	const { viewport } = stage;
 	// The engines, once both run.
-	const engines = createMemo(() => {
-		const dusk = stage.dusk();
-		const flock = stage.flock();
-		return dusk && flock ? { dusk, flock } : null;
-	}, { name: 'engines' });
+	const engines = createMemo(() => !!stage.dusk() && !!stage.flock(), { name: 'engines' });
 
 	/** Where the line ("Still here?") and the lake's screen begin on the page. Layout, so read again
 	 *  when the window changes (the elements are there once the page has settled). */
@@ -57,11 +54,12 @@ export function createDescent(stage: StageBase) {
 		},
 		{ name: 'marks' }
 	);
-	const inside = createMemo(() => !!engines() && viewport.scroll() > marks().line - viewport.height() * 0.5, { name: 'inside' });
+	const inside = createMemo(() => engines() && viewport.scroll() > marks().line - viewport.height() * 0.5, { name: 'inside' });
 	/** How far the page has scrolled from the line to the lake. */
 	const toward = createMemo(() => clamp((viewport.scroll() - marks().line) / (marks().lake - marks().line)), { name: 'toward' });
 	/** How far down the camera is (0 to 1). */
-	const [down] = createSpring(() => (inside() ? toward() : 0), DESCEND);
+	// Leaving the scene, it is back at the top at once, ready to come down again.
+	const [down] = createSpring(() => (inside() ? toward() : 0), DESCEND, { jump: () => !inside() });
 	const p = createMemo(() => clamp(down()), { name: 'descent' });
 
 	/** The first stars are out as the line comes up, before anything else. */
@@ -94,55 +92,12 @@ export function createDescent(stage: StageBase) {
 	const clip = createMemo(() => `inset(${frame().end}px ${frame().side}px round ${RADIUS}px)`, { name: 'clip' });
 	/** Has the email come up? Once it has, it stays up until the page leaves the scene. */
 	const surfaced = createMemo<boolean>((was) => inside() && (!!was || p() > 0.97), { name: 'surfaced' });
-	/** Where the email is on screen, for the link laid over it. */
-	const emailRect = createMemo(
-		() => {
-			const dusk = stage.dusk();
-			if (!dusk || !surfaced()) return null;
-			return dusk.emailRect(viewport.width(), viewport.height(), camera().eye, camera().target);
-		},
-		{ name: 'emailRect' }
-	);
 
 	// The flock as it is on the page, and as dark birds against the sky (no bloom: as ink, a glow
-	// would be a dark smudge round it), in the scene's place, seen by its camera.
+	// would be a dark smudge round it), set into the scene, seen by its camera.
 	const page = { ...stage.params };
 	const night = { ...stage.params, box, ink: 1, mirror: 0.6, bloom: 0, streak: 1, size: 1.9 };
-	const placed = { ...placement, eye: [...placement.eye] as Vec3, target: [...placement.target] as Vec3 };
-
-	createEffect(
-		() => (engines() ? { ...engines()!, on: inside() } : null),
-		(enter) => {
-			if (!enter) return;
-			const { dusk, flock, on } = enter;
-			dusk.ink(night.gain, ink(night.inkColor));
-			Object.assign(stage.params, on ? night : page);
-			flock.place(on ? placed : null);
-			dusk.run(on);
-			if (!on) dusk.sink();
-		},
-		{ name: 'enterScene' }
-	);
-	createEffect(
-		() => (engines() && inside() ? { dusk: engines()!.dusk, camera: camera(), exposure: exposure(), stars: stars() } : null),
-		(view) => {
-			if (!view) return;
-			const { dusk } = view;
-			placed.eye = view.camera.eye;
-			placed.target = view.camera.target;
-			dusk.look(view.camera.eye, view.camera.target);
-			dusk.settings.exposure = view.exposure;
-			dusk.settings.stars = view.stars;
-		},
-		{ name: 'aimCamera' }
-	);
-	createEffect(
-		() => (surfaced() ? engines()?.dusk : null),
-		(dusk) => {
-			dusk?.surface();
-		},
-		{ name: 'surface' }
-	);
+	const placed = createMemo(() => (inside() ? { ...placement, ...camera() } : null), { name: 'placed' });
 
 	return {
 		/** Whether the scene is on (and the page is at the end). */
@@ -155,8 +110,23 @@ export function createDescent(stage: StageBase) {
 		/** Dark birds against black still show a little: they come up with the scene. */
 		birds: createMemo(() => clamp(exposure() * 2), { name: 'birdsOpacity' }),
 		/** "Say hi sometime": in as the way down starts, dissolving near the bottom. */
-		hi: createMemo(() => ({ in: p() > 0.02, out: p() > 0.68 }), { name: 'hi' }),
+		hi: createMemo(() => ({ in: inside() && p() > 0.02, out: p() > 0.68 }), { name: 'hi' }),
 		surfaced,
-		emailRect
+		/** Where the email is on screen once it is up, for the link laid over it. */
+		emailRect: createMemo(() => (surfaced() ? (stage.dusk()?.emailRect() ?? null) : null), { name: 'emailRect' }),
+		/** What the engines are told (they read it every frame). */
+		scene: {
+			running: inside,
+			camera,
+			exposure,
+			stars,
+			up: surfaced,
+			reflection: () => stage.flock()?.reflection(),
+			ink: { gain: night.gain, color: ink(night.inkColor) }
+		},
+		flock: {
+			params: () => (inside() ? night : page),
+			placed
+		}
 	};
 }

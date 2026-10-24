@@ -16,7 +16,6 @@ export default function Sandbox() {
 			s[key] = value;
 		});
 	const [flock, setFlock] = createSignal<FlockControl | null>(null, { name: 'flock' });
-	const [stats, setStats] = createSignal('', { name: 'stats' });
 	const [error, setError] = createSignal<string | null>(null, { name: 'error' });
 	const [bare, setBare] = createSignal(false, { name: 'bare' });
 	let canvas!: HTMLCanvasElement;
@@ -32,10 +31,20 @@ export default function Sandbox() {
 		Object.assign(window, { params, setParams });
 		const toggle = (e: KeyboardEvent) => e.key === 'h' && !(e.target instanceof HTMLInputElement) && setBare((b) => !b);
 		addEventListener('keydown', toggle);
-		startBoids(canvas, params, { onStats: (s) => setStats(describe(s)) })
-			.then(setFlock)
+		let running: FlockControl | null = null;
+		let disposed = false;
+		startBoids(canvas, params)
+			.then((started) => {
+				if (disposed) return started.dispose();
+				running = started;
+				setFlock(started);
+			})
 			.catch((e: Error) => setError(e.message));
-		return () => removeEventListener('keydown', toggle);
+		return () => {
+			disposed = true;
+			running?.dispose();
+			removeEventListener('keydown', toggle);
+		};
 	});
 	// Kept between visits.
 	createEffect(
@@ -55,7 +64,7 @@ export default function Sandbox() {
 		<div class={['sandbox', { bare: bare() }]} style={{ background: params.background }}>
 			<Title>Boids sandbox</Title>
 			<canvas ref={canvas} />
-			<pre class="stats">{stats()}</pre>
+			<pre class="stats">{flock()?.stats() ? describe(flock()!.stats()!) : ''}</pre>
 			<aside class="panel">
 				<For each={sliders}>
 					{(group) => (

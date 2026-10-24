@@ -1,12 +1,10 @@
-import { createMemo, createSignal, For, onSettled, Show } from 'solid-js';
+import { createSignal, For, onSettled, Show } from 'solid-js';
 import { Title } from '@solidjs/meta';
-import { startBoids } from '../boids/app';
+import { startBoids, type FlockControl } from '../boids/app';
 import { defaults } from '../boids/params';
 import { EMAIL } from '../contact';
-import { palettes } from '../dusk/palettes';
+import { PALETTE, palettes } from '../dusk/palettes';
 import { box, placement } from '../dusk/placement';
-import type { Dusk } from '../dusk/scene';
-import { createClock } from '../lib/frame';
 import type { Scene } from '../stage';
 import './dusk.css';
 
@@ -15,43 +13,58 @@ const ink = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 
 /** The dusk scene on its own, for working on it: the lake, its sky and its far shore, the flock,
  *  and the email rising out of the water, with controls. */
 export default function DuskPage() {
-	// What the scene reads every frame; the controls write it.
-	const settings: Dusk = { sun: { azimuth: 18, elevation: -1.2 }, exposure: 1, stars: 1, email: EMAIL };
+	// What the controls set; the scene reads it every frame.
+	const [azimuth, setAzimuth] = createSignal(18, { name: 'azimuth' });
+	const [elevation, setElevation] = createSignal(-1.2, { name: 'elevation' });
+	const [exposure, setExposure] = createSignal(1, { name: 'exposure' });
+	const [palette, setPalette] = createSignal(PALETTE, { name: 'palette' });
 	// The flock, as dark birds against the sky: dots with a short tail, and no bloom (as ink, a glow
 	// would be a dark smudge round it). It shares the scene's GPU device, so its mirror image can be
 	// a texture the water samples, rippled.
-	const flock = { ...defaults, box, ink: 1, mirror: 0.6, bloom: 0, streak: 1, size: 1.9 };
+	const flockParams = { ...defaults, box, ink: 1, mirror: 0.6, bloom: 0, streak: 1, size: 1.9 };
 	const [scene, setScene] = createSignal<Scene | null>(null, { name: 'scene' });
+	const [flock, setFlock] = createSignal<FlockControl | null>(null, { name: 'flock' });
 	const [error, setError] = createSignal<string | null>(null, { name: 'error' });
 	let duskCanvas!: HTMLCanvasElement;
 	let flockCanvas!: HTMLCanvasElement;
 
 	onSettled(() => {
 		// For tuning from the console.
-		Object.assign(window, { flock, settings });
+		Object.assign(window, { flock: flockParams });
 		let timer = 0;
-		import('../dusk/scene')
-			.then(({ startDusk }) => startDusk(duskCanvas, settings))
-			.then((dusk) => {
-				dusk.ink(flock.gain, ink(flock.inkColor));
-				setScene(dusk);
-				// The email rises after a moment.
-				timer = window.setTimeout(dusk.surface, 2500);
-				return startBoids(flockCanvas, flock, { placed: placement, device: dusk.device, onReflection: dusk.reflect });
-			})
-			.catch((e: Error) => {
-				setError(e.message);
-				console.error(e);
+		let disposed = false;
+		const engines: { dispose(): void }[] = [];
+		(async () => {
+			const { startDusk } = await import('../dusk/scene');
+			const dusk = await startDusk(duskCanvas, {
+				email: EMAIL,
+				sun: () => ({ azimuth: azimuth(), elevation: elevation() }),
+				exposure,
+				palette,
+				reflection: () => flock()?.reflection(),
+				ink: { gain: flockParams.gain, color: ink(flockParams.inkColor) }
 			});
-		return () => clearTimeout(timer);
+			engines.push(dusk);
+			const birds = await startBoids(flockCanvas, flockParams, { placed: placement, device: dusk.device, reflect: true });
+			engines.push(birds);
+			if (disposed) return engines.forEach((e) => e.dispose());
+			setScene(dusk);
+			setFlock(birds);
+			// The email rises after a moment.
+			timer = window.setTimeout(dusk.surface, 2500);
+		})().catch((e: Error) => {
+			setError(e.message);
+			console.error(e);
+		});
+		return () => {
+			disposed = true;
+			clearTimeout(timer);
+			engines.forEach((e) => e.dispose());
+		};
 	});
 
-	// The link lies over the email the scene draws, following it as it rises and bobs.
-	const now = createClock();
-	const rect = createMemo(() => {
-		now();
-		return scene()?.emailRect(innerWidth, innerHeight) ?? null;
-	});
+	/** The link lies over the email the scene draws, following it as it rises and bobs. */
+	const rect = () => scene()?.emailRect() ?? null;
 
 	const range = (label: string, min: number, max: number, step: number, value: number, set: (v: number) => void) => (
 		<label>
@@ -82,18 +95,18 @@ export default function DuskPage() {
 				{EMAIL}
 			</a>
 			<aside>
-				{range('sun azimuth', -60, 60, 0.5, settings.sun.azimuth, (v) => (settings.sun.azimuth = v))}
-				{range('sun elevation', -6, 6, 0.1, settings.sun.elevation, (v) => (settings.sun.elevation = v))}
+				{range('sun azimuth', -60, 60, 0.5, 18, setAzimuth)}
+				{range('sun elevation', -6, 6, 0.1, -1.2, setElevation)}
 				<label>
 					palette{' '}
-					<select onChange={(e) => (settings.palette = palettes[e.currentTarget.value])}>
+					<select onChange={(e) => setPalette(palettes[e.currentTarget.value])}>
 						<For each={Object.keys(palettes)}>{(name) => <option value={name}>{name}</option>}</For>
 					</select>
 				</label>
 				<button type="button" onClick={() => scene()?.surface()}>
 					surface
 				</button>
-				{range('exposure', 0.3, 2, 0.05, settings.exposure, (v) => (settings.exposure = v))}
+				{range('exposure', 0.3, 2, 0.05, 1, setExposure)}
 			</aside>
 			<Show when={error()}>{(message) => <p class="error">{message()}</p>}</Show>
 		</div>
