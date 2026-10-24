@@ -4,6 +4,8 @@ import type { StageValue } from './stage';
 
 const D = defaults.distance; // the camera's distance from the flock's middle, at rest
 const clamp = (x: number) => Math.min(Math.max(x, 0), 1);
+/** A plane's title plays in once the camera is this close, against where the plane rests. */
+const ARRIVING = 1.3;
 
 export interface PlaneOptions {
 	/** World units from the flock's middle toward the camera; behind it (negative), the boids fly
@@ -41,6 +43,8 @@ export function createPlane(stage: StageValue, o: PlaneOptions) {
 			const recede = o.recede ? clamp((stage.viewport.scroll() / H - stage.flightEnd) / o.recede) : 0;
 			return {
 				seen: near * far * (1 - recede),
+				// How far off it is, against where it rests: 1 there, more while still coming.
+				coming: dist / at,
 				transform: `perspective(${eye.toFixed(2)}px) translateZ(${((flown + o.depth) * (eye / D)).toFixed(2)}px) scale(${((at / D) * (1 - 0.12 * recede)).toFixed(4)})`
 			};
 		},
@@ -59,7 +63,10 @@ export function createPlane(stage: StageValue, o: PlaneOptions) {
 		}),
 		/** Only what you are reading can be clicked or selected, not the faint ones about it. */
 		inert: () => seen() < 0.5,
-		/** Its title is in once it is mostly there, and out again once it has nearly gone. */
-		shown: createMemo<boolean>((was) => (seen() > 0.6 ? true : seen() < 0.05 ? false : !!was), { name: 'planeShown' })
+		/** Its title plays in as the camera arrives at it (within ARRIVING of where it rests), and out
+		 *  again once it has nearly gone. */
+		shown: createMemo<boolean>((was) => (seen() > 0.3 && placed().coming < ARRIVING ? true : seen() < 0.05 ? false : !!was), {
+			name: 'planeShown'
+		})
 	};
 }
